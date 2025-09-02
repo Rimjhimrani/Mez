@@ -185,29 +185,9 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
     """Modified bus model detection for D6, M, P, 55T"""
     result = {'D6': '', 'M': '', 'P': '', '55T': ''}
     
-    qty_veh = ""
-    if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
-        qty_veh_raw = row[qty_veh_col]
-        if pd.notna(qty_veh_raw):
-            qty_veh = clean_number_format(qty_veh_raw)
+    qty_veh_col = next((col for col in cols if any(term in col for term in ['QTY/VEH', 'QTY_VEH', 'QTY PER VEH', 'QTYVEH', 'QTYPERCAR', 'QTYCAR', 'QTY/CAR'])), None)
 
-    if not qty_veh:
-        return result
-    
-    # Check if quantity already contains model info
-    qty_pattern = r'(D6|M|P|55T)[:\-\s]*(\d+)'
-    matches = re.findall(qty_pattern, qty_veh.upper())
-    
-    if matches:
-        for model, quantity in matches:
-            if model in result:
-                result[model] = quantity
-        return result
-    
-    # Look for bus model in dedicated bus model column
-    detected_model = None
-    if bus_model_col and bus_model_col in row and pd.notna(row[bus_model_col]):
-        bus_model_col = find_bus_model_column(original_columns)
+    bus_model_col = find_bus_model_column(original_columns)
 
     if status_callback:
         status_callback(f"Using columns - Part No: {part_no_col}, Description: {desc_col}")
@@ -258,61 +238,12 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
         if status_callback:
             status_callback(error_msg)
         return None
-
-    if status_callback:
-        status_callback(f"Using columns - Part No: {part_no_col}, Description: {desc_col}")
-
-    # Create document with custom margins for 2 stickers per page
-    doc = SimpleDocTemplate(output_pdf_path, pagesize=A4,
-                          topMargin=1*cm, bottomMargin=1*cm,
-                          leftMargin=1.5*cm, rightMargin=1.5*cm)
-
-    all_elements = []
-    total_rows = len(df)
-
-    # Process rows in pairs for 2 per page
-    for i in range(0, total_rows, 2):
-        if status_callback:
-            status_callback(f"Creating stickers {i+1}-{min(i+2, total_rows)} of {total_rows}")
-        
-        # First sticker
-        sticker1 = create_single_sticker(
-            df.iloc[i], part_no_col, desc_col, max_capacity_col, 
-            qty_veh_col, store_loc_col, bus_model_col
-        )
-        all_elements.append(sticker1)
-        
-        # Add spacer between stickers
-        all_elements.append(Spacer(1, 1.5*cm))
-        
-        # Second sticker (if exists)
-        if i + 1 < total_rows:
-            sticker2 = create_single_sticker(
-                df.iloc[i+1], part_no_col, desc_col, max_capacity_col,
-                qty_veh_col, store_loc_col, bus_model_col
-            )
-            all_elements.append(sticker2)
-        
-        # Add page break after every pair (except the last pair)
-        if i + 2 < total_rows:
-            all_elements.append(PageBreak())
-
-    # Build the document
-    try:
-        doc.build(all_elements)
-        if status_callback:
-            status_callback(f"PDF generated successfully: {output_pdf_path}")
-        return output_pdf_path
-    except Exception as e:
-        error_msg = f"Error building PDF: {e}"
-        if status_callback:
-            status_callback(error_msg)
         
 def main():
     """Main Streamlit application"""
-    st.set_page_config(page_title="Dynamic Mezzanine Label Generator", page_icon="🏷️", layout="wide")
+    st.set_page_config(page_title="Mezzanine Label Generator", page_icon="🏷️", layout="wide")
     
-    st.title("🏷️ Dynamic Mezzanine Label Generator")
+    st.title("🏷️ Mezzanine Label Generator")
     st.markdown(
         "<p style='font-size:18px; font-style:italic; margin-top:-10px; text-align:left;'>"
         "Designed and Developed by Agilomatrix</p>",
@@ -418,9 +349,14 @@ def main():
                 "- Excel (.xlsx, .xls) or CSV file\n"
                 "- Part Number column\n"
                 "- Description column\n"
-                "- Optional: Max Capacity, QTY/VEH column\n"
-                "- **Dynamic Store Location: 1-12 cells** (only shows populated fields)\n"
-                "- Optional: Bus Model column (D6, M, P, 55T)"
+                "- Optional: Max Capacity column\n"
+                "- **Dynamic Store Location: 1-12 cells** (automatically detects)\n"
+                "- Optional: QTY/VEH column\n"
+                "- Optional: Bus Model column (D6, M, P, 55T)\n\n"
+                "**🔄 Dynamic Features:**\n"
+                "- Store location adapts from 1 to 12 cells based on your data\n"
+                "- Font size adjusts automatically\n"
+                "- Column widths optimize based on cell count"
             )
     
     else:
@@ -449,289 +385,68 @@ def main():
         
         with col3:
             st.markdown("""
-            **🏪 Dynamic Store Location**
-            - **1-12 cells based on data**
-            - Only shows populated fields
-            - Auto-adjusts font size & spacing
-            - Flexible column mapping
+            **🔄 Dynamic Store Location**
+            - Flexible 1-12 cells (auto-detects)
+            - Smart column width adjustment
+            - Adaptive font sizing
+            - Works with any data structure
             """)
-
-        # Additional info section about dynamic store location
-        st.markdown("---")
-        st.subheader("🔧 Dynamic Store Location Feature")
+    
+    # Additional info section
+    st.markdown("---")
+    st.subheader("📖 Store Location Detection")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
         st.markdown("""
-        **Smart Cell Display:**
-        - **Minimum:** 1 cell (if only one store location field has data)
-        - **Maximum:** 12 cells (supports up to 12 different store location fields)
-        - **Automatic:** Only non-empty fields are displayed
-        - **Responsive:** Font size and spacing adjust automatically based on number of cells
-        
-        **Supported Column Names:**
-        - `Store Loc 1` to `Store Loc 12`
-        - `Station Name`, `Store Location`, `Zone`, `Location`, `Floor`
-        - `Rack`, `Level`, `Cell`, `Section`, `Bin`, `Position`, `Shelf`
-        - And many more variations...
+        **Automatic Column Detection:**
+        - `Store Loc 1`, `Store Loc 2`, ... `Store Loc 12`
+        - `STORE_LOC_1`, `STORE_LOC_2`, ... `STORE_LOC_12`
+        - Common names: Station Name, Zone, Location, Floor, Rack, Level, Cell, etc.
         """)
-        
-        # Example scenarios
-        st.subheader("📋 Example Scenarios")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            **Scenario 1: Minimal Data**
-            - Only `Store Loc 1: "A-Zone"` has data
-            - Result: 1 large cell showing "A-Zone"
-            - Font size: 16px (maximum readability)
-            """)
-            
-            st.markdown("""
-            **Scenario 2: Medium Data**  
-            - 5 fields: Zone, Floor, Rack, Level, Cell
-            - Result: 5 medium-sized cells
-            - Font size: 14px (good balance)
-            """)
-        
-        with col2:
-            st.markdown("""
-            **Scenario 3: Maximum Data**
-            - All 12 fields populated
-            - Result: 12 compact cells
-            - Font size: 10px (still readable)
-            """)
-            
-            st.markdown("""
-            **Scenario 4: Mixed Data**
-            - Fields 1,3,5,7 have data, others empty
-            - Result: Only 4 cells shown
-            - Empty fields are automatically filtered out
-            """)
-
-        # Technical details
-        st.markdown("---")
-        st.subheader("⚙️ Technical Details")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            **Column Detection Priority:**
-            1. Exact matches: `Store Loc 1`, `Store Loc 2`, etc.
-            2. Standard names: `Station Name`, `Zone`, `Floor`
-            3. ABB format: `ABB ZONE`, `ABB RACK NO`
-            4. Generic: `Location`, `Cell`, `Bin`
-            """)
-        
-        with col2:
-            st.markdown("""
-            **Automatic Adjustments:**
-            - **Font Size:** 16px → 10px based on cell count
-            - **Column Width:** Equal distribution with compaction
-            - **Padding:** Reduces for more cells
-            - **QR Code:** Includes all location data
-            """)
-
-        # Tips and best practices
-        st.markdown("---")
-        st.subheader("💡 Tips & Best Practices")
-        
+    
+    with col2:
         st.markdown("""
-        **For Best Results:**
-        - Use consistent column naming (e.g., `Store Loc 1`, `Store Loc 2`, etc.)
-        - Keep individual cell values concise (3-8 characters work best)
-        - Leave empty cells blank (don't use spaces, "N/A", or "-")
-        - Test with a small sample first to verify column detection
-        
-        **Troubleshooting:**
-        - If store location doesn't appear, check column names match supported patterns
-        - For very long text in cells, consider abbreviations
-        - If layout looks cramped, reduce the number of populated location fields
+        **Dynamic Behavior:**
+        - **Minimum:** 1 cell (even if empty)
+        - **Maximum:** 12 cells
+        - **Auto-sizing:** Font and columns adjust based on cell count
+        - **Smart detection:** Finds relevant columns automatically
         """)
     
     # Footer
     st.markdown("---")
     st.markdown(
         "<p style='text-align: center; color: gray; font-size: 14px;'>"
-        "© 2025 Agilomatrix - Dynamic Mezzanine Label Generator v3.0 (Dynamic 1-12 Cell Store Location)</p>",
+        "© 2025 Agilomatrix - Dynamic Mezzanine Label Generator v3.0 (1-12 Dynamic Store Location)</p>",
         unsafe_allow_html=True
     )
 
 if __name__ == "__main__":
-    main()
-    """Main Streamlit application"""
-    st.set_page_config(page_title="Dynamic Mezzanine Label Generator", page_icon="🏷️", layout="wide")
-    
-    st.title("🏷️ Dynamic Mezzanine Label Generator")
-    st.markdown(
-        "<p style='font-size:18px; font-style:italic; margin-top:-10px; text-align:left;'>"
-        "Designed and Developed by Agilomatrix</p>",
-        unsafe_allow_html=True
-    )
+    main()_veh = ""
+    if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
+        qty_veh_raw = row[qty_veh_col]
+        if pd.notna(qty_veh_raw):
+            qty_veh = clean_number_format(qty_veh_raw)
 
-    st.markdown("---")
+    if not qty_veh:
+        return result
     
-    # File upload
-    st.header("📁 File Upload")
-    uploaded_file = st.file_uploader(
-        "Choose an Excel or CSV file",
-        type=['xlsx', 'xls', 'csv'],
-        help="Upload your Excel or CSV file containing part information"
-    )
+    # Check if quantity already contains model info
+    qty_pattern = r'(D6|M|P|55T)[:\-\s]*(\d+)'
+    matches = re.findall(qty_pattern, qty_veh.upper())
     
-    if uploaded_file is not None:
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            temp_input_path = tmp_file.name
-        
-        # Display file info
-        st.success(f"✅ File uploaded: {uploaded_file.name}")
-        
-        # Preview data
-        try:
-            if uploaded_file.name.lower().endswith('.csv'):
-                preview_df = pd.read_csv(temp_input_path).head(5)
-            else:
-                preview_df = pd.read_excel(temp_input_path).head(5)
-            
-            st.subheader("📊 Data Preview (First 5 rows)")
-            st.dataframe(preview_df, use_container_width=True)
-            
-        except Exception as e:
-            st.error(f"Error previewing file: {e}")
-            return
-        
-        # Generate labels section
-        st.subheader("🚀 Generate Labels")
-        
-        col1, col2 = st.columns([1, 1])
-        
-        with col1:
-            if st.button("🏷️ Generate PDF Labels", type="primary", use_container_width=True):
-                # Create progress container
-                status_container = st.empty()
-                
-                # Create temporary output file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_output:
-                    temp_output_path = tmp_output.name
-                
-                # Progress tracking
-                def update_status(message):
-                    status_container.info(f"📊 {message}")
-                
-                try:
-                    # Generate the PDF
-                    update_status("Starting dynamic label generation...")
-                    
-                    result_path = generate_sticker_labels(
-                        temp_input_path, 
-                        temp_output_path,
-                        status_callback=update_status
-                    )
-                    
-                    if result_path:
-                        # Success - provide download
-                        with open(result_path, 'rb') as pdf_file:
-                            pdf_data = pdf_file.read()
-                        
-                        status_container.success("✅ Labels generated successfully!")
-                        
-                        # Download button
-                        st.download_button(
-                            label="📥 Download PDF Labels",
-                            data=pdf_data,
-                            file_name=f"dynamic_mezzanine_labels_{uploaded_file.name.split('.')[0]}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                        
-                    else:
-                        status_container.error("❌ Failed to generate PDF labels")
-                        
-                except Exception as e:
-                    status_container.error(f"❌ Error generating labels: {str(e)}")
-                    st.error("Please check your file format and try again.")
-                
-                finally:
-                    # Clean up temporary files
-                    try:
-                        os.unlink(temp_input_path)
-                        if 'temp_output_path' in locals():
-                            os.unlink(temp_output_path)
-                    except:
-                        pass
-        
-        with col2:
-            st.info(
-                "**📋 Requirements:**\n"
-                "- Excel (.xlsx, .xls) or CSV file\n"
-                "- Part Number column\n"
-                "- Description column\n"
-                "- Optional: Max Capacity, QTY/VEH column\n"
-                "- **Dynamic Store Location: 1-12 cells** (only shows populated fields)\n"
-                "- Optional: Bus Model column (D6, M, P, 55T)"
-            )
+    if matches:
+        for model, quantity in matches:
+            if model in result:
+                result[model] = quantity
+        return result
     
-    else:
-        # Instructions when no file is uploaded
-        st.info("👆 Please upload an Excel or CSV file to get started")
-        
-        # Feature highlights
-        st.subheader("✨ Features")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("""
-            **🏷️ Professional Labels**
-            - Clean, readable design
-            - Optimized for printing
-            - 2 labels per page
-            """)
-        
-        with col2:
-            st.markdown("""
-            **📱 QR Code Integration**
-            - Automatic QR code generation
-            - Contains all part information
-            - Easy scanning and tracking
-            """)
-        
-        with col3:
-            st.markdown("""
-            **🏪 Dynamic Store Location**
-            - **1-12 cells based on data**
-            - Only shows populated fields
-            - Auto-adjusts font size & spacing
-            - Flexible column mapping
-            """)
-
-        # Additional info section about dynamic store location
-        st.markdown("---")
-        st.subheader("🔧 Dynamic Store Location Feature")
-        st.markdown("""
-        **Smart Cell Display:**
-        - **Minimum:** 1 cell (if only one store location field has data)
-        - **Maximum:** 12 cells (supports up to 12 different store location fields)
-        - **Automatic:** Only non-empty fields are displayed
-        - **Responsive:** Font size and spacing adjust automatically based on number of cells
-        
-        **Supported Column Names:**
-        - `Store Loc 1` to `Store Loc 12`
-        - `Station Name`, `Store Location`, `Zone`, `Location`, `Floor`
-        - `Rack`, `Level`, `Cell`, `Section`, `Bin`, `Position`, `Shelf`
-        - And many more variations...
-        """)
-    
-    # Footer
-    st.markdown("---")
-    st.markdown(
-        "<p style='text-align: center; color: gray; font-size: 14px;'>"
-        "© 2025 Agilomatrix - Dynamic Mezzanine Label Generator v3.0 (Dynamic 1-12 Cell Store Location)</p>",
-        unsafe_allow_html=True
-    )
-
-if __name__ == "__main__":
-    main()_model_value = str(row[bus_model_col]).strip().upper()
+    # Look for bus model in dedicated bus model column
+    detected_model = None
+    if bus_model_col and bus_model_col in row and pd.notna(row[bus_model_col]):
+        bus_model_value = str(row[bus_model_col]).strip().upper()
         
         if bus_model_value in ['D6']:
             detected_model = 'D6'
@@ -810,7 +525,7 @@ def generate_qr_code(data_string):
         return None
 
 def extract_store_location_data_from_excel(row_data):
-    """Extract store location data dynamically - max 12 cells, min 1 cell"""
+    """Extract store location data from Excel row - DYNAMIC up to 12 cells"""
     def get_clean_value(possible_names, default=''):
         for name in possible_names:
             if name in row_data:
@@ -824,51 +539,64 @@ def extract_store_location_data_from_excel(row_data):
                         return clean_number_format(val)
         return default
     
-    # Define all possible store location fields (up to 12)
-    store_loc_fields = [
-        (['Store Loc 1', 'STORE_LOC_1', 'Station Name', 'STATION NAME'], ''),
-        (['Store Loc 2', 'STORE_LOC_2', 'Store Location', 'STORE LOCATION'], ''),
-        (['Store Loc 3', 'STORE_LOC_3', 'ABB ZONE', 'Zone'], ''),
-        (['Store Loc 4', 'STORE_LOC_4', 'ABB LOCATION', 'Location'], ''),
-        (['Store Loc 5', 'STORE_LOC_5', 'ABB FLOOR', 'Floor'], ''),
-        (['Store Loc 6', 'STORE_LOC_6', 'ABB RACK NO', 'Rack'], ''),
-        (['Store Loc 7', 'STORE_LOC_7', 'ABB LEVEL', 'Level'], ''),
-        (['Store Loc 8', 'STORE_LOC_8', 'ABB CELL', 'Cell'], ''),
-        (['Store Loc 9', 'STORE_LOC_9', 'ABB SECTION', 'Section'], ''),
-        (['Store Loc 10', 'STORE_LOC_10', 'ABB BIN', 'Bin'], ''),
-        (['Store Loc 11', 'STORE_LOC_11', 'ABB POSITION', 'Position'], ''),
-        (['Store Loc 12', 'STORE_LOC_12', 'ABB SHELF', 'Shelf'], ''),
-    ]
+    # Try to get up to 12 store location cells
+    store_locations = []
     
-    # Extract all values
-    all_values = []
-    for field_names, default in store_loc_fields:
-        value = get_clean_value(field_names, default)
-        all_values.append(value)
+    # First, try numbered store location columns (Store Loc 1, Store Loc 2, etc.)
+    for i in range(1, 13):  # 1 to 12
+        store_loc = get_clean_value([
+            f'Store Loc {i}', f'STORE_LOC_{i}', f'Store Location {i}', 
+            f'STORE LOCATION {i}', f'StoreLocation{i}', f'STORELOCATION{i}'
+        ], '')
+        if store_loc:
+            store_locations.append(store_loc)
     
-    # Filter out empty values and keep only non-empty ones
-    non_empty_values = [val for val in all_values if val and str(val).strip()]
+    # If no numbered columns found, try common alternative column names
+    if not store_locations:
+        common_names = [
+            ['Station Name', 'STATION NAME', 'STATION_NAME'],
+            ['Store Location', 'STORE LOCATION', 'STORE_LOCATION'],
+            ['ABB ZONE', 'Zone', 'ZONE'],
+            ['ABB LOCATION', 'Location', 'LOCATION'],
+            ['ABB FLOOR', 'Floor', 'FLOOR'],
+            ['ABB RACK NO', 'Rack', 'RACK', 'RACK_NO'],
+            ['ABB LEVEL', 'Level', 'LEVEL'],
+            ['ABB CELL', 'Cell', 'CELL'],
+            ['ABB SECTION', 'Section', 'SECTION'],
+            ['ABB BIN', 'Bin', 'BIN'],
+            ['ABB POSITION', 'Position', 'POSITION'],
+            ['ABB SLOT', 'Slot', 'SLOT']  # 12th option
+        ]
+        
+        for names in common_names:
+            store_loc = get_clean_value(names, '')
+            if store_loc:
+                store_locations.append(store_loc)
     
-    # If no values found, return at least one empty cell
-    if not non_empty_values:
-        return ['']
+    # If still no data found, look for any column containing 'store', 'location', etc.
+    if not store_locations:
+        for col in row_data.index:
+            if isinstance(col, str):
+                col_upper = col.upper()
+                if any(keyword in col_upper for keyword in ['STORE', 'LOCATION', 'ZONE', 'RACK', 'LEVEL', 'FLOOR', 'CELL', 'BIN', 'POSITION', 'SLOT']):
+                    val = row_data[col]
+                    if pd.notna(val) and str(val).lower() not in ['nan', 'none', 'null', '']:
+                        clean_val = clean_number_format(val)
+                        if clean_val and clean_val not in store_locations:
+                            store_locations.append(clean_val)
+                            if len(store_locations) >= 12:  # Max 12 cells
+                                break
     
-    # Return only the non-empty values (dynamic number of cells)
-    return non_empty_values
-
-def get_dynamic_store_loc_style(num_cells):
-    """Get appropriate font size based on number of store location cells"""
-    if num_cells <= 3:
-        return 16
-    elif num_cells <= 6:
-        return 14
-    elif num_cells <= 9:
-        return 12
-    else:
-        return 10  # For 10-12 cells
+    # Ensure at least 1 cell (even if empty) but not more than 12
+    if not store_locations:
+        store_locations = ['']  # At least 1 empty cell
+    elif len(store_locations) > 12:
+        store_locations = store_locations[:12]  # Max 12 cells
+    
+    return store_locations
 
 def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col):
-    """Create a single sticker layout with border around the entire sticker"""
+    """Create a single sticker layout with border around the entire sticker - DYNAMIC STORE LOCATION"""
     # Extract data with proper number formatting
     part_no = clean_number_format(row[part_no_col]) if pd.notna(row[part_no_col]) else ""
     desc = str(row[desc_col]).strip() if pd.notna(row[desc_col]) else ""
@@ -937,37 +665,34 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
 
     sticker_content.append(main_table)
 
-    # Store Location section - DYNAMIC CELLS (1-12 cells based on data)
+    # Store Location section - DYNAMIC NUMBER OF CELLS
     store_loc_label = Paragraph("Store Location", ParagraphStyle(
         name='StoreLoc', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER
     ))
     
     inner_table_width = CONTENT_BOX_WIDTH * 2 / 3
     
-    # DYNAMIC: Get actual number of cells and calculate widths
+    # DYNAMIC COLUMN WIDTHS based on number of cells
     num_cells = len(store_loc_values)
-    
-    # Calculate column widths dynamically
-    if num_cells == 1:
-        col_widths = [inner_table_width]
-    elif num_cells <= 3:
-        # For 1-3 cells, give equal width
-        col_widths = [inner_table_width / num_cells] * num_cells
-    elif num_cells <= 6:
-        # For 4-6 cells, slightly adjust proportions
-        base_width = inner_table_width / num_cells
-        col_widths = [base_width * 0.9] * num_cells
+    if num_cells <= 4:
+        # For 1-4 cells, use wider columns
+        col_width = inner_table_width / num_cells
+        inner_col_widths = [col_width] * num_cells
+        font_size = 16
+    elif num_cells <= 8:
+        # For 5-8 cells, use medium columns
+        col_width = inner_table_width / num_cells
+        inner_col_widths = [col_width] * num_cells
+        font_size = 14
     else:
-        # For 7-12 cells, make them more compact
-        base_width = inner_table_width / num_cells
-        col_widths = [base_width * 0.8] * num_cells
-    
-    # Get dynamic font size based on number of cells
-    font_size = get_dynamic_store_loc_style(num_cells)
+        # For 9-12 cells, use narrower columns
+        col_width = inner_table_width / num_cells
+        inner_col_widths = [col_width] * num_cells
+        font_size = 12
 
     store_loc_inner_table = Table(
         [store_loc_values],
-        colWidths=col_widths,
+        colWidths=inner_col_widths,
         rowHeights=[store_loc_row_height]
     )
     
@@ -976,7 +701,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), font_size),  # DYNAMIC FONT SIZE
+        ('FONTSIZE', (0, 0), (-1, -1), font_size),  # Dynamic font size based on number of cells
         # DYNAMIC PADDING based on number of cells
         ('LEFTPADDING', (0, 0), (-1, -1), max(1, 4 - num_cells//3)),
         ('RIGHTPADDING', (0, 0), (-1, -1), max(1, 4 - num_cells//3)),
@@ -1212,161 +937,3 @@ def generate_sticker_labels(excel_file_path, output_pdf_path, status_callback=No
         if status_callback:
             status_callback(error_msg)
         return None
-        
-def main():
-    """Main Streamlit application"""
-    st.set_page_config(page_title="Mezzanine Label Generator", page_icon="🏷️", layout="wide")
-    
-    st.title("🏷️ Mezzanine Label Generator")
-    st.markdown(
-        "<p style='font-size:18px; font-style:italic; margin-top:-10px; text-align:left;'>"
-        "Designed and Developed by Agilomatrix</p>",
-        unsafe_allow_html=True
-    )
-
-    st.markdown("---")
-    
-    # File upload
-    st.header("📁 File Upload")
-    uploaded_file = st.file_uploader(
-        "Choose an Excel or CSV file",
-        type=['xlsx', 'xls', 'csv'],
-        help="Upload your Excel or CSV file containing part information"
-    )
-    
-    if uploaded_file is not None:
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            temp_input_path = tmp_file.name
-        
-        # Display file info
-        st.success(f"✅ File uploaded: {uploaded_file.name}")
-        
-        # Preview data
-        try:
-            if uploaded_file.name.lower().endswith('.csv'):
-                preview_df = pd.read_csv(temp_input_path).head(5)
-            else:
-                preview_df = pd.read_excel(temp_input_path).head(5)
-            
-            st.subheader("📊 Data Preview (First 5 rows)")
-            st.dataframe(preview_df, use_container_width=True)
-            
-        except Exception as e:
-            st.error(f"Error previewing file: {e}")
-            return
-        
-        # Generate labels section
-        st.subheader("🚀 Generate Labels")
-        
-        col1, col2 = st.columns([1, 1])
-        
-        with col1:
-            if st.button("🏷️ Generate PDF Labels", type="primary", use_container_width=True):
-                # Create progress container
-                status_container = st.empty()
-                
-                # Create temporary output file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_output:
-                    temp_output_path = tmp_output.name
-                
-                # Progress tracking
-                def update_status(message):
-                    status_container.info(f"📊 {message}")
-                
-                try:
-                    # Generate the PDF
-                    update_status("Starting optimized label generation...")
-                    
-                    result_path = generate_sticker_labels(
-                        temp_input_path, 
-                        temp_output_path,
-                        status_callback=update_status
-                    )
-                    
-                    if result_path:
-                        # Success - provide download
-                        with open(result_path, 'rb') as pdf_file:
-                            pdf_data = pdf_file.read()
-                        
-                        status_container.success("✅ Downloaded")
-                        
-                        # Download button
-                        st.download_button(
-                            label="📥 Download PDF Labels",
-                            data=pdf_data,
-                            file_name=f"mezzanine_labels_{uploaded_file.name.split('.')[0]}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                        
-                    else:
-                        status_container.error("❌ Failed to generate PDF labels")
-                        
-                except Exception as e:
-                    status_container.error(f"❌ Error generating labels: {str(e)}")
-                    st.error("Please check your file format and try again.")
-                
-                finally:
-                    # Clean up temporary files
-                    try:
-                        os.unlink(temp_input_path)
-                        if 'temp_output_path' in locals():
-                            os.unlink(temp_output_path)
-                    except:
-                        pass
-        
-        with col2:
-            st.info(
-                "**📋 Requirements:**\n"
-                "- Excel (.xlsx, .xls) or CSV file\n"
-                "- Part Number column\n"
-                "- Description column\n"
-                "- Optional: Max Capacity, Store Location columns (1-11)\n"
-                "- Optional: QTY/VEH column\n"
-                "- Optional: Bus Model column (D6, M, P, 55T)"
-            )
-    
-    else:
-        # Instructions when no file is uploaded
-        st.info("👆 Please upload an Excel or CSV file to get started")
-        
-        # Feature highlights
-        st.subheader("✨ Features")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("""
-            **🏷️ Professional Labels**
-            - Clean, readable design
-            - Optimized for printing
-            - 2 labels per page
-            """)
-        
-        with col2:
-            st.markdown("""
-            **📱 QR Code Integration**
-            - Automatic QR code generation
-            - Contains all part information
-            - Easy scanning and tracking
-            """)
-        
-        with col3:
-            st.markdown("""
-            **🏪 Enhanced Store Location**
-            - Support for 11 location cells
-            - Flexible column mapping
-            - Compact display format
-            """)
-    
-    # Footer
-    st.markdown("---")
-    st.markdown(
-        "<p style='text-align: center; color: gray; font-size: 14px;'>"
-        "© 2025 Agilomatrix - Mezzanine Label Generator v2.1 (11-Cell Store Location)</p>",
-        unsafe_allow_html=True
-    )
-
-if __name__ == "__main__":
-    main()
