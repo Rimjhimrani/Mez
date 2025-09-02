@@ -182,62 +182,67 @@ def find_bus_model_column(df_columns):
     return None
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
-    """Modified bus model detection for D6, M, P, 55T"""
+    """
+    Return a dict with quantities for models D6, M, P, 55T based on a row.
+    Looks first for patterns like 'D6:3, M-2' in QTY/VEH; otherwise uses a bus model column.
+    """
     result = {'D6': '', 'M': '', 'P': '', '55T': ''}
-    
-    qty_veh_col = next((col for col in cols if any(term in col for term in ['QTY/VEH', 'QTY_VEH', 'QTY PER VEH', 'QTYVEH', 'QTYPERCAR', 'QTYCAR', 'QTY/CAR'])), None)
 
-    bus_model_col = find_bus_model_column(original_columns)
+    # Get quantity-per-vehicle as a clean string
+    qty_veh = ""
+    if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
+        qty_veh_raw = row[qty_veh_col]
+        if pd.notna(qty_veh_raw):
+            qty_veh = clean_number_format(qty_veh_raw)
 
-    if status_callback:
-        status_callback(f"Using columns - Part No: {part_no_col}, Description: {desc_col}")
+    if not qty_veh:
+        # No qty → nothing to distribute
+        return result
 
-    # Create document with custom margins for 2 stickers per page
-    doc = SimpleDocTemplate(output_pdf_path, pagesize=A4,
-                          topMargin=1*cm, bottomMargin=1*cm,
-                          leftMargin=1.5*cm, rightMargin=1.5*cm)
+    # If QTY/VEH contains explicit model→qty (e.g., "D6:4, M-2")
+    qty_pattern = r'(D6|M|P|55T)[:\-\s]*(\d+)'
+    matches = re.findall(qty_pattern, str(qty_veh).upper())
+    if matches:
+        for model, quantity in matches:
+            if model in result:
+                result[model] = quantity
+        return result
 
-    all_elements = []
-    total_rows = len(df)
+    # Otherwise, try to detect a single model column and assign qty_veh to it
+    detected_model = None
+    if bus_model_col and bus_model_col in row and pd.notna(row[bus_model_col]):
+        value = str(row[bus_model_col]).strip().upper()
+        if re.search(r'\bD6\b', value):
+            detected_model = 'D6'
+        elif re.search(r'\b55T\b', value):
+            detected_model = '55T'
+        elif re.search(r'\bP\b', value):
+            detected_model = 'P'
+        elif re.search(r'\bM\b', value):
+            detected_model = 'M'
 
-    # Process rows in pairs for 2 per page
-    for i in range(0, total_rows, 2):
-        if status_callback:
-            status_callback(f"Creating stickers {i+1}-{min(i+2, total_rows)} of {total_rows}")
-        
-        # First sticker
-        sticker1 = create_single_sticker(
-            df.iloc[i], part_no_col, desc_col, max_capacity_col, 
-            qty_veh_col, store_loc_col, bus_model_col
-        )
-        all_elements.append(sticker1)
-        
-        # Add spacer between stickers
-        all_elements.append(Spacer(1, 1.5*cm))
-        
-        # Second sticker (if exists)
-        if i + 1 < total_rows:
-            sticker2 = create_single_sticker(
-                df.iloc[i+1], part_no_col, desc_col, max_capacity_col,
-                qty_veh_col, store_loc_col, bus_model_col
-            )
-            all_elements.append(sticker2)
-        
-        # Add page break after every pair (except the last pair)
-        if i + 2 < total_rows:
-            all_elements.append(PageBreak())
+    if detected_model:
+        result[detected_model] = qty_veh
+        return result
 
-    # Build the document
-    try:
-        doc.build(all_elements)
-        if status_callback:
-            status_callback(f"PDF generated successfully: {output_pdf_path}")
-        return output_pdf_path
-    except Exception as e:
-        error_msg = f"Error building PDF: {e}"
-        if status_callback:
-            status_callback(error_msg)
-        return None
+    # Last resort: scan other columns for a model name
+    for col in row.index:
+        if pd.notna(row[col]):
+            val = str(row[col]).upper()
+            if re.search(r'\bD6\b', val):
+                result['D6'] = qty_veh
+                return result
+            if re.search(r'\b55T\b', val):
+                result['55T'] = qty_veh
+                return result
+            if re.search(r'\bP\b', val):
+                result['P'] = qty_veh
+                return result
+            if re.search(r'\bM\b', val):
+                result['M'] = qty_veh
+                return result
+
+    return result
         
 def main():
     """Main Streamlit application"""
@@ -424,7 +429,7 @@ def main():
     )
 
 if __name__ == "__main__":
-    main()_veh = ""
+    main()
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh_raw = row[qty_veh_col]
         if pd.notna(qty_veh_raw):
@@ -884,56 +889,61 @@ def generate_sticker_labels(excel_file_path, output_pdf_path, status_callback=No
     store_loc_col = next((col for col in cols if 'STORE' in col and 'LOC' in col),
                       next((col for col in cols if 'STORELOCATION' in col), None))
 
-    qty_veh_col = next((col for col in cols if any(term in col for term in ['QTY/VEH', 'QTY_VEH', 'QTY PER VEH', 'QTYVEH', 'QTYPERCAR', 'QTYCAR', 'QTY/CAR'])), None)
+    qty_veh_col = next(
+        (col for col in cols if any(key in col for key in ['QTY/VEH', 'QTY_VEH', 'QTY PER VEH', 'QTYVEH', 'QTYPERCAR', 'QTYCAR', 'QTY/CAR'])),
+        next((col for col in cols if 'QTY' in col and 'VEH' in col), None)
+    )
 
-    bus_model_col = find_bus_model_column(original_columns)
+    # Try to detect bus model column using original names (then map to upper)
+    bus_model_original = find_bus_model_column(original_columns)
+    bus_model_col = bus_model_original.upper() if isinstance(bus_model_original, str) else None
 
     if status_callback:
-        status_callback(f"Using columns - Part No: {part_no_col}, Description: {desc_col}")
+        status_callback(f"Detected columns → PART: {part_no_col}, DESC: {desc_col}, MAXCAP: {max_capacity_col}, QTY/VEH: {qty_veh_col}, BUSMODEL: {bus_model_col}")
 
-    # Create document with custom margins for 2 stickers per page
-    doc = SimpleDocTemplate(output_pdf_path, pagesize=A4,
-                          topMargin=1*cm, bottomMargin=1*cm,
-                          leftMargin=1.5*cm, rightMargin=1.5*cm)
+    # Prepare PDF
+    doc = SimpleDocTemplate(
+        output_pdf_path, pagesize=STICKER_PAGESIZE,
+        topMargin=1*cm, bottomMargin=1*cm, leftMargin=1.5*cm, rightMargin=1.5*cm
+    )
 
-    all_elements = []
+    elements = []
     total_rows = len(df)
 
-    # Process rows in pairs for 2 per page
+    # Build stickers 2 per page (each sticker is a KeepTogether of fixed height)
     for i in range(0, total_rows, 2):
         if status_callback:
             status_callback(f"Creating stickers {i+1}-{min(i+2, total_rows)} of {total_rows}")
-        
+
         # First sticker
-        sticker1 = create_single_sticker(
-            df.iloc[i], part_no_col, desc_col, max_capacity_col, 
-            qty_veh_col, store_loc_col, bus_model_col
-        )
-        all_elements.append(sticker1)
-        
-        # Add spacer between stickers
-        all_elements.append(Spacer(1, 1.5*cm))
-        
-        # Second sticker (if exists)
-        if i + 1 < total_rows:
-            sticker2 = create_single_sticker(
-                df.iloc[i+1], part_no_col, desc_col, max_capacity_col,
+        elements.append(
+            create_single_sticker(
+                df.iloc[i], part_no_col, desc_col, max_capacity_col,
                 qty_veh_col, store_loc_col, bus_model_col
             )
-            all_elements.append(sticker2)
-        
-        # Add page break after every pair (except the last pair)
-        if i + 2 < total_rows:
-            all_elements.append(PageBreak())
+        )
+        elements.append(Spacer(1, 1.2*cm))  # space between the two stickers
 
-    # Build the document
+        # Second sticker if available
+        if i + 1 < total_rows:
+            elements.append(
+                create_single_sticker(
+                    df.iloc[i+1], part_no_col, desc_col, max_capacity_col,
+                    qty_veh_col, store_loc_col, bus_model_col
+                )
+            )
+
+        # Page break after each pair, except after the last pair
+        if i + 2 < total_rows:
+            elements.append(PageBreak())
+
+    # Build PDF
     try:
-        doc.build(all_elements)
+        doc.build(elements)
         if status_callback:
             status_callback(f"PDF generated successfully: {output_pdf_path}")
         return output_pdf_path
     except Exception as e:
-        error_msg = f"Error building PDF: {e}"
         if status_callback:
-            status_callback(error_msg)
+            status_callback(f"Error building PDF: {e}")
         return None
