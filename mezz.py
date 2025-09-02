@@ -288,17 +288,26 @@ def generate_qr_code(data_string):
 def extract_store_location_data_from_excel(row_data, max_cells=12):
     """Extract up to 12 store location values dynamically"""
     values = []
-    for i in range(1, max_cells+1):
-        possible_names = [f"Store Loc {i}", f"STORE_LOC_{i}"]
-        val = None
+    
+    def get_clean_value(possible_names):
         for name in possible_names:
             if name in row_data:
-                candidate = row_data[name]
-                if pd.notna(candidate) and str(candidate).strip().lower() not in ['nan', 'none', 'null', '']:
-                    val = clean_number_format(candidate)
-                    break
+                val = row_data[name]
+                if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
+                    return clean_number_format(val)
+            for col in row_data.index:
+                if isinstance(col, str) and col.upper() == name.upper():
+                    val = row_data[col]
+                    if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
+                        return clean_number_format(val)
+        return None
+
+    # Loop through possible Store Loc 1 → Store Loc 12
+    for i in range(1, max_cells + 1):
+        val = get_clean_value([f'Store Loc {i}', f'STORE_LOC_{i}'])
         if val:
             values.append(val)
+
     return values
 
 def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col):
@@ -369,23 +378,13 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
 
     sticker_content.append(main_table)
 
-    # Store Location section - UPDATED FOR 11 CELLS
     store_loc_label = Paragraph("Store Location", ParagraphStyle(
         name='StoreLoc', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER
     ))
-    
-    inner_table_width = CONTENT_BOX_WIDTH * 2 / 3
-    # UPDATED COLUMN PROPORTIONS FOR 11 CELLS - Made more compact to fit 11 cells
-    col_proportions = [1.2, 0.8, 1.0, 1.0, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]  # 11 columns
-    total_proportion = sum(col_proportions)
-    inner_col_widths = [w * inner_table_width / total_proportion for w in col_proportions]
-
     store_loc_values = [v for v in extract_store_location_data_from_excel(row) if v]  # keep only non-empty
-    # Fallback in case no value at all
     if not store_loc_values:
         store_loc_values = [""]
 
-    # Dynamically adjust column widths
     inner_table_width = CONTENT_BOX_WIDTH * 2 / 3
     num_cols = len(store_loc_values)
     inner_col_widths = [inner_table_width / num_cols] * num_cols
@@ -395,33 +394,30 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         colWidths=inner_col_widths,
         rowHeights=[store_loc_row_height]
     )
-    
+
     store_loc_inner_table.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 14),  # REDUCED FONT SIZE FOR 11 CELLS to fit better
-        # ADDED PADDING FOR STORE LOCATION CELLS - Reduced for 11 cells
+        ('FONTSIZE', (0, 0), (-1, -1), 14),
         ('LEFTPADDING', (0, 0), (-1, -1), 1),
         ('RIGHTPADDING', (0, 0), (-1, -1), 1),
         ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-        # Enable text wrapping
         ('WORDWRAP', (0, 0), (-1, -1), True),
     ]))
-    
+
     store_loc_table = Table(
         [[store_loc_label, store_loc_inner_table]],
         colWidths=[CONTENT_BOX_WIDTH/3, inner_table_width],
         rowHeights=[store_loc_row_height]
     )
-    
+
     store_loc_table.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        # ADDED PADDING FOR STORE LOCATION SECTION
         ('LEFTPADDING', (0, 0), (-1, -1), 8),
         ('RIGHTPADDING', (0, 0), (-1, -1), 8),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
