@@ -439,7 +439,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     mtm_row_height = 1.8*cm
 
     position_matrix_data = [
-        ["S", "M", "D6", "P"],  # Updated headers
+        ["D6", "M", "P", "55T"],  # Updated headers
         [
             Paragraph(f"<b>{mtm_quantities['D6']}</b>", ParagraphStyle(
                 name='BoldS', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
