@@ -182,8 +182,8 @@ def find_bus_model_column(df_columns):
     return None
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
-    """Modified bus model detection for S, M, D6, P and one additional box"""
-    result = {'S': '', 'M': '', 'D6': '', 'P': '', 'X': ''}  # Added 'X' as the 5th box
+    """Modified bus model detection for S, M, D6, P"""
+    result = {'S': '', 'M': '', 'D6': '', 'P': ''}
     
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
@@ -195,7 +195,7 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
         return result
     
     # Check if quantity already contains model info
-    qty_pattern = r'(S|M|D6|P|X)[:\-\s]*(\d+)'
+    qty_pattern = r'(S|M|D6|P)[:\-\s]*(\d+)'
     matches = re.findall(qty_pattern, qty_veh.upper())
     
     if matches:
@@ -217,8 +217,6 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
             detected_model = 'D6'
         elif bus_model_value in ['P']:
             detected_model = 'P'
-        elif bus_model_value in ['X']:
-            detected_model = 'X'
         elif re.search(r'\bS\b', bus_model_value):
             detected_model = 'S'
         elif re.search(r'\bM\b', bus_model_value):
@@ -227,8 +225,6 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
             detected_model = 'D6'
         elif re.search(r'\bP\b', bus_model_value):
             detected_model = 'P'
-        elif re.search(r'\bX\b', bus_model_value):
-            detected_model = 'X'
     
     if detected_model:
         result[detected_model] = qty_veh
@@ -261,9 +257,6 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
                 return result
             elif re.search(r'\bP\b', value_str):
                 result['P'] = qty_veh
-                return result
-            elif re.search(r'\bX\b', value_str):
-                result['X'] = qty_veh
                 return result
     
     return result
@@ -441,12 +434,12 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     # Add small spacer
     sticker_content.append(Spacer(1, 0.1*cm))
 
-    # Bottom section - MTM boxes and QR code (UPDATED FOR 5 BOXES)
-    mtm_box_width = 1.4*cm  # Reduced width to fit 5 boxes
+    # Bottom section - MTM boxes and QR code (UPDATED FOR 4 BOXES)
+    mtm_box_width = 1.6*cm  # Adjusted width to fit 4 boxes
     mtm_row_height = 1.8*cm
 
     position_matrix_data = [
-        ["S", "M", "D6", "P", "X"],  # Updated headers
+        ["S", "M", "D6", "P"],  # Updated headers
         [
             Paragraph(f"<b>{mtm_quantities['S']}</b>", ParagraphStyle(
                 name='BoldS', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
@@ -459,16 +452,13 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
             )) if mtm_quantities['D6'] else "",
             Paragraph(f"<b>{mtm_quantities['P']}</b>", ParagraphStyle(
                 name='BoldP', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['P'] else "",
-            Paragraph(f"<b>{mtm_quantities['X']}</b>", ParagraphStyle(
-                name='BoldX', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['X'] else ""
+            )) if mtm_quantities['P'] else ""
         ]
     ]
 
     mtm_table = Table(
         position_matrix_data,
-        colWidths=[mtm_box_width, mtm_box_width, mtm_box_width, mtm_box_width, mtm_box_width],  # 5 columns
+        colWidths=[mtm_box_width, mtm_box_width, mtm_box_width, mtm_box_width],  # 4 columns
         rowHeights=[mtm_row_height/2, mtm_row_height/2]
     )
 
@@ -506,8 +496,8 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
 
-    # Calculate spacing for better QR code centering (UPDATED FOR 5 BOXES)
-    total_mtm_width = 5 * mtm_box_width  # Now 5 boxes instead of 3
+    # Calculate spacing for better QR code centering (UPDATED FOR 4 BOXES)
+    total_mtm_width = 4 * mtm_box_width  # Now 4 boxes instead of 3
     remaining_width = CONTENT_BOX_WIDTH - total_mtm_width - qr_width
     
     # Split the remaining space more evenly for better centering
@@ -790,7 +780,7 @@ def main():
         with col3:
             st.markdown("""
             **🚌 Bus Model Support**
-            - Automatic S, M, D6, P, X detection
+            - Automatic S, M, D6, P detection
             - Flexible column mapping
             - Smart quantity parsing
             """)
