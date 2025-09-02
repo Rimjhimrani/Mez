@@ -286,7 +286,7 @@ def generate_qr_code(data_string):
         return None
 
 def extract_store_location_data_from_excel(row_data):
-    """Extract store location data from Excel row for Store Location"""
+    """Extract store location data from Excel row for Store Location - UPDATED FOR 11 CELLS"""
     def get_clean_value(possible_names, default=''):
         for name in possible_names:
             if name in row_data:
@@ -308,8 +308,12 @@ def extract_store_location_data_from_excel(row_data):
     store_loc_6 = get_clean_value(['Store Loc 6', 'STORE_LOC_6', 'ABB RACK NO', 'Rack'], '')
     store_loc_7 = get_clean_value(['Store Loc 7', 'STORE_LOC_7', 'ABB LEVEL', 'Level'], '')
     store_loc_8 = get_clean_value(['Store Loc 8', 'STORE_LOC_8', 'ABB CELL', 'Cell'], '')
+    # ADDED 3 MORE CELLS
+    store_loc_9 = get_clean_value(['Store Loc 9', 'STORE_LOC_9', 'ABB SECTION', 'Section'], '')
+    store_loc_10 = get_clean_value(['Store Loc 10', 'STORE_LOC_10', 'ABB BIN', 'Bin'], '')
+    store_loc_11 = get_clean_value(['Store Loc 11', 'STORE_LOC_11', 'ABB POSITION', 'Position'], '')
     
-    return [store_loc_1, store_loc_2, store_loc_3, store_loc_4, store_loc_5, store_loc_6, store_loc_7, store_loc_8]
+    return [store_loc_1, store_loc_2, store_loc_3, store_loc_4, store_loc_5, store_loc_6, store_loc_7, store_loc_8, store_loc_9, store_loc_10, store_loc_11]
 
 def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col):
     """Create a single sticker layout with border around the entire sticker"""
@@ -379,13 +383,14 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
 
     sticker_content.append(main_table)
 
-    # Store Location section
+    # Store Location section - UPDATED FOR 11 CELLS
     store_loc_label = Paragraph("Store Location", ParagraphStyle(
         name='StoreLoc', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER
     ))
     
     inner_table_width = CONTENT_BOX_WIDTH * 2 / 3
-    col_proportions = [1.4, 0.6, 1.2, 1.2, 0.6, 0.8, 0.6, 0.8]
+    # UPDATED COLUMN PROPORTIONS FOR 11 CELLS - Made more compact to fit 11 cells
+    col_proportions = [1.2, 0.8, 1.0, 1.0, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]  # 11 columns
     total_proportion = sum(col_proportions)
     inner_col_widths = [w * inner_table_width / total_proportion for w in col_proportions]
 
@@ -402,10 +407,10 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 18),  # Reduced font size for better fit
-        # ADDED PADDING FOR STORE LOCATION CELLS
-        ('LEFTPADDING', (0, 0), (-1, -1), 2),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('FONTSIZE', (0, 0), (-1, -1), 14),  # REDUCED FONT SIZE FOR 11 CELLS to fit better
+        # ADDED PADDING FOR STORE LOCATION CELLS - Reduced for 11 cells
+        ('LEFTPADDING', (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
         ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
         # Enable text wrapping
@@ -749,7 +754,8 @@ def main():
                 "- Excel (.xlsx, .xls) or CSV file\n"
                 "- Part Number column\n"
                 "- Description column\n"
-                "- Optional: Max Capacity, Store Location, QTY/VEH columns\n"
+                "- Optional: Max Capacity, Store Location columns (1-11)\n"
+                "- Optional: QTY/VEH column\n"
                 "- Optional: Bus Model column (D6, M, P, 55T)"
             )
     
@@ -779,17 +785,17 @@ def main():
         
         with col3:
             st.markdown("""
-            **🚌 Bus Model Support**
-            - Automatic D6, M, P, 55T detection
+            **🏪 Enhanced Store Location**
+            - Support for 11 location cells
             - Flexible column mapping
-            - Smart quantity parsing
+            - Compact display format
             """)
     
     # Footer
     st.markdown("---")
     st.markdown(
         "<p style='text-align: center; color: gray; font-size: 14px;'>"
-        "© 2025 Agilomatrix - Mezzanine Label Generator v2.0</p>",
+        "© 2025 Agilomatrix - Mezzanine Label Generator v2.1 (11-Cell Store Location)</p>",
         unsafe_allow_html=True
     )
 
