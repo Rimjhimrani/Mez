@@ -182,8 +182,8 @@ def find_bus_model_column(df_columns):
     return None
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
-    """Modified bus model detection for S, M, D6, P"""
-    result = {'S': '', 'M': '', 'D6': '', 'P': ''}
+    """Modified bus model detection for D6, M, P, 55T"""
+    result = {'D6': '', 'M': '', 'P': '', '55T': ''}
     
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
@@ -209,22 +209,22 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
     if bus_model_col and bus_model_col in row and pd.notna(row[bus_model_col]):
         bus_model_value = str(row[bus_model_col]).strip().upper()
         
-        if bus_model_value in ['S']:
-            detected_model = 'S'
+        if bus_model_value in ['D6']:
+            detected_model = 'D6'
         elif bus_model_value in ['M']:
             detected_model = 'M'
-        elif bus_model_value in ['D6']:
-            detected_model = 'D6'
         elif bus_model_value in ['P']:
             detected_model = 'P'
-        elif re.search(r'\bS\b', bus_model_value):
-            detected_model = 'S'
-        elif re.search(r'\bM\b', bus_model_value):
-            detected_model = 'M'
+        elif bus_model_value in ['55T']:
+            detected_model = '55T'
         elif re.search(r'\bD6\b', bus_model_value):
             detected_model = 'D6'
+        elif re.search(r'\bM\b', bus_model_value):
+            detected_model = 'M'
         elif re.search(r'\bP\b', bus_model_value):
             detected_model = 'P'
+        elif re.search(r'\b55T\b', bus_model_value):
+            detected_model = '55T'
     
     if detected_model:
         result[detected_model] = qty_veh
@@ -246,17 +246,17 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
         if pd.notna(row[col]):
             value_str = str(row[col]).upper()
             
-            if re.search(r'\bS\b', value_str):
-                result['S'] = qty_veh
+            if re.search(r'\bD6\b', value_str):
+                result['D6'] = qty_veh
                 return result
             elif re.search(r'\bM\b', value_str):
                 result['M'] = qty_veh
                 return result
-            elif re.search(r'\bD6\b', value_str):
-                result['D6'] = qty_veh
-                return result
             elif re.search(r'\bP\b', value_str):
                 result['P'] = qty_veh
+                return result
+            elif re.search(r'\b55T\b', value_str):
+                result['55T'] = qty_veh
                 return result
     
     return result
@@ -441,18 +441,18 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     position_matrix_data = [
         ["S", "M", "D6", "P"],  # Updated headers
         [
-            Paragraph(f"<b>{mtm_quantities['S']}</b>", ParagraphStyle(
+            Paragraph(f"<b>{mtm_quantities['D6']}</b>", ParagraphStyle(
                 name='BoldS', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['S'] else "",
+            )) if mtm_quantities['D6'] else "",
             Paragraph(f"<b>{mtm_quantities['M']}</b>", ParagraphStyle(
                 name='BoldM', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
             )) if mtm_quantities['M'] else "",
-            Paragraph(f"<b>{mtm_quantities['D6']}</b>", ParagraphStyle(
-                name='BoldD6', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['D6'] else "",
             Paragraph(f"<b>{mtm_quantities['P']}</b>", ParagraphStyle(
+                name='BoldD6', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
+            )) if mtm_quantities['P'] else "",
+            Paragraph(f"<b>{mtm_quantities['55T']}</b>", ParagraphStyle(
                 name='BoldP', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['P'] else ""
+            )) if mtm_quantities['55T'] else ""
         ]
     ]
 
@@ -750,7 +750,7 @@ def main():
                 "- Part Number column\n"
                 "- Description column\n"
                 "- Optional: Max Capacity, Store Location, QTY/VEH columns\n"
-                "- Optional: Bus Model column (S, M, D6, P, X)"
+                "- Optional: Bus Model column (D6, M, P, 55T)"
             )
     
     else:
@@ -780,7 +780,7 @@ def main():
         with col3:
             st.markdown("""
             **🚌 Bus Model Support**
-            - Automatic S, M, D6, P detection
+            - Automatic D6, M, P, 55T detection
             - Flexible column mapping
             - Smart quantity parsing
             """)
