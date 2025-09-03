@@ -183,44 +183,64 @@ def find_bus_model_column(df_columns):
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
     """
-    Always create exactly 5 model boxes.
-    Model names come from data, extra boxes stay blank.
-    Each model shows its own QTY/VEH if available.
+    Dynamically extract model columns and their values from data.
+    No hardcoded model names - completely data-driven.
     """
     result = {}
-
-    # Quantity per vehicle (single value if provided)
-    qty_veh = ""
+    
+    # Default quantity per vehicle
+    default_qty = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
-        qty_veh = clean_number_format(row[qty_veh_col])
+        default_qty = clean_number_format(row[qty_veh_col])
 
-    models = []
-
-    # Collect dynamic models from the given bus_model_cols
-    if bus_model_cols:
+    # If specific bus_model_cols are provided, use those
+    if bus_model_cols and isinstance(bus_model_cols, list):
         for col in bus_model_cols[:max_models]:
-            if col in row and pd.notna(row[col]):
-                models.append(str(row[col]).strip().upper())
-
-    # Fallback: scan row for model-like columns
-    if not models:
+            if col in row.index:
+                col_value = row[col]
+                if pd.notna(col_value) and str(col_value).strip() not in ['', 'nan', 'NaN', 'none', 'None', 'null', 'Null']:
+                    clean_value = clean_number_format(col_value)
+                    if clean_value:
+                        result[str(col).strip()] = clean_value
+    else:
+        # Auto-detect model columns from the data
+        # Look for columns that might contain model data
+        potential_models = []
+        
         for col in row.index:
-            if pd.notna(row[col]) and any(k in str(col).upper() for k in ["MODEL", "BUS", "VEHICLE", "TYPE"]):
-                models.append(str(row[col]).strip().upper())
-                if len(models) >= max_models:
-                    break
-
-    # Deduplicate and cap at 5
-    models = list(dict.fromkeys(models))[:max_models]
-
-    # Fill result with models (and qty if exists)
-    for m in models:
-        result[m] = qty_veh if qty_veh else ""
-
-    # Add blank slots until we have exactly 5
-    while len(result) < max_models:
-        result[f"BLANK{len(result)+1}"] = ""
-
+            col_name = str(col).strip()
+            col_value = row[col]
+            
+            # Skip empty/null values
+            if pd.isna(col_value) or str(col_value).strip() in ['', 'nan', 'NaN', 'none', 'None', 'null', 'Null']:
+                continue
+            
+            # Skip common non-model columns
+            skip_keywords = ['PART', 'DESC', 'CAPACITY', 'STORE', 'LOC', 'QTY/VEH', 'QTY_VEH']
+            if any(skip in col_name.upper() for skip in skip_keywords):
+                continue
+                
+            # Check if this might be a model column
+            # Could be single letters, short codes, or contain model-related keywords
+            col_upper = col_name.upper()
+            
+            # Include columns that:
+            # 1. Are short (likely model codes)
+            # 2. Contain model-related keywords
+            # 3. Have numeric or alphanumeric values that could be quantities
+            if (len(col_name) <= 4 or  # Short column names (A, M, BF, D6, etc.)
+                any(keyword in col_upper for keyword in ['MODEL', 'BUS', 'VEHICLE', 'TYPE']) or
+                col_name.isalnum()):  # Alphanumeric codes
+                
+                clean_value = clean_number_format(col_value)
+                if clean_value:
+                    potential_models.append((col_name, clean_value))
+        
+        # Sort by column name and take first max_models
+        potential_models.sort(key=lambda x: x[0])
+        for col_name, value in potential_models[:max_models]:
+            result[col_name] = value
+    
     return result
 
 def generate_qr_code(data_string):
