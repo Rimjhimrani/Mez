@@ -183,19 +183,19 @@ def find_bus_model_column(df_columns):
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
     """
-    Dynamically detect bus models (min 1, max 5).
-    - If only one model is detected → one box with qty.
-    - If multiple models are detected → show all, only fill the matching one.
-    - Ignore part numbers like AA0012M (only accept clean model tokens like 12M).
+    Detect bus models from dedicated Bus Model column(s) only.
+    - If only 1 model is detected → one box with qty.
+    - If multiple models → show all, only fill the matching one.
+    - Ignores store location and other unrelated columns.
     """
     result = {}
 
-    # Extract QTY/VEH string
+    # Get QTY/VEH value
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
 
-    # Step 1: Explicit mapping in QTY/VEH (e.g., "12M:4, 9M:2")
+    # Explicit mapping in QTY/VEH (e.g., "12M:4, 9M:2")
     qty_pattern = r'([A-Z0-9]+)[:\-\s]*(\d+)'
     matches = re.findall(qty_pattern, str(qty_veh).upper()) if qty_veh else []
     if matches:
@@ -203,34 +203,23 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
             result[model] = quantity
         return result
 
-    # Step 2: Detect models from columns
+    # ✅ Step 1: Collect models only from bus_model_cols
     detected_models = []
     if bus_model_cols:
         for col in bus_model_cols[:max_models]:
             if col in row and pd.notna(row[col]):
                 model_name = str(row[col]).strip().upper()
-                # ✅ Only accept short model-like strings (max 4 chars)
+                # Only keep short names like 12M, 55T, D6 (ignore long part numbers)
                 if model_name and len(model_name) <= 4:
-                    if model_name not in detected_models:
-                        detected_models.append(model_name)
+                    detected_models.append(model_name)
 
-    # Step 3: Fallback → scan row values
-    if not detected_models:
-        for col in row.index:
-            if pd.notna(row[col]):
-                value = str(row[col]).strip().upper()
-                # ✅ Accept only short tokens (like 12M, 9M, 55T), not long part numbers
-                if re.match(r'^[0-9]*[A-Z]+[0-9]*$', value) and len(value) <= 4:
-                    if value not in detected_models:
-                        detected_models.append(value)
-                        if len(detected_models) >= max_models:
-                            break
-
-    # Step 4: Assign values
+    # Step 2: Assign values
     if detected_models:
         if len(detected_models) == 1:
+            # Single model → one box with qty
             result[detected_models[0]] = qty_veh if qty_veh else ""
         else:
+            # Multiple models → show all, only fill matching one
             for m in detected_models[:max_models]:
                 result[m] = ""
             if qty_veh:
@@ -239,6 +228,7 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
                 else:
                     result[detected_models[0]] = qty_veh
     else:
+        # No models detected → fallback
         if qty_veh:
             result["MODEL"] = qty_veh
 
