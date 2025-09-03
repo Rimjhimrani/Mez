@@ -571,8 +571,9 @@ def generate_sticker_labels(excel_file_path, output_pdf_path, status_callback=No
         # First sticker
         sticker1 = create_single_sticker(
             df.iloc[i], part_no_col, desc_col, max_capacity_col, 
-            qty_veh_col, store_loc_col, bus_model_col
+            qty_veh_col, store_loc_col, bus_model_col, all_models
         )
+        
         all_elements.append(sticker1)
         
         # Add spacer between stickers
