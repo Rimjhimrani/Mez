@@ -548,8 +548,12 @@ def generate_sticker_labels(excel_file_path, output_pdf_path, status_callback=No
 
     bus_model_col = find_bus_model_column(original_columns)
 
-    if status_callback:
-        status_callback(f"Using columns - Part No: {part_no_col}, Description: {desc_col}")
+    if bus_model_col and bus_model_col in df.columns:
+        all_models = df[bus_model_col].dropna().unique().tolist()
+        all_models = [str(m).strip().upper() for m in all_models if str(m).strip() != ""]
+        all_models = all_models[:5]  # only first 5 if more
+    else:
+        all_models = []
 
     # Create document with custom margins for 2 stickers per page
     doc = SimpleDocTemplate(output_pdf_path, pagesize=A4,
