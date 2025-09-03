@@ -183,64 +183,43 @@ def find_bus_model_column(df_columns):
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
     """
-    Dynamically extract model columns and their values from data.
-    No hardcoded model names - completely data-driven.
+    Detect bus models dynamically (min 1, max 5 boxes).
+    Returns dict {model_name: quantity}.
     """
     result = {}
-    
-    # Default quantity per vehicle
-    default_qty = ""
-    if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
-        default_qty = clean_number_format(row[qty_veh_col])
 
-    # If specific bus_model_cols are provided, use those
-    if bus_model_cols and isinstance(bus_model_cols, list):
+    # Quantity per vehicle (base value)
+    qty_veh = ""
+    if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
+        qty_veh = clean_number_format(row[qty_veh_col])
+
+    # If QTY/VEH contains explicit "MODEL:QTY"
+    if qty_veh:
+        qty_pattern = r'([A-Za-z0-9]+)[:\-\s]*(\d+)'
+        matches = re.findall(qty_pattern, str(qty_veh).upper())
+        if matches:
+            for model, quantity in matches[:max_models]:
+                result[model] = quantity
+            return result
+
+    # Otherwise, scan dedicated model columns
+    if bus_model_cols:
         for col in bus_model_cols[:max_models]:
-            if col in row.index:
-                col_value = row[col]
-                if pd.notna(col_value) and str(col_value).strip() not in ['', 'nan', 'NaN', 'none', 'None', 'null', 'Null']:
-                    clean_value = clean_number_format(col_value)
-                    if clean_value:
-                        result[str(col).strip()] = clean_value
-    else:
-        # Auto-detect model columns from the data
-        # Look for columns that might contain model data
-        potential_models = []
-        
+            if col in row and pd.notna(row[col]):
+                model_name = str(row[col]).strip().upper()
+                if model_name:   # only if not empty
+                    result[model_name] = qty_veh
+
+    # Fallback: scan whole row for model-like values
+    if not result and qty_veh:
         for col in row.index:
-            col_name = str(col).strip()
-            col_value = row[col]
-            
-            # Skip empty/null values
-            if pd.isna(col_value) or str(col_value).strip() in ['', 'nan', 'NaN', 'none', 'None', 'null', 'Null']:
-                continue
-            
-            # Skip common non-model columns
-            skip_keywords = ['PART', 'DESC', 'CAPACITY', 'STORE', 'LOC', 'QTY/VEH', 'QTY_VEH']
-            if any(skip in col_name.upper() for skip in skip_keywords):
-                continue
-                
-            # Check if this might be a model column
-            # Could be single letters, short codes, or contain model-related keywords
-            col_upper = col_name.upper()
-            
-            # Include columns that:
-            # 1. Are short (likely model codes)
-            # 2. Contain model-related keywords
-            # 3. Have numeric or alphanumeric values that could be quantities
-            if (len(col_name) <= 4 or  # Short column names (A, M, BF, D6, etc.)
-                any(keyword in col_upper for keyword in ['MODEL', 'BUS', 'VEHICLE', 'TYPE']) or
-                col_name.isalnum()):  # Alphanumeric codes
-                
-                clean_value = clean_number_format(col_value)
-                if clean_value:
-                    potential_models.append((col_name, clean_value))
-        
-        # Sort by column name and take first max_models
-        potential_models.sort(key=lambda x: x[0])
-        for col_name, value in potential_models[:max_models]:
-            result[col_name] = value
-    
+            if pd.notna(row[col]) and any(k in str(col).upper() for k in ["MODEL", "BUS", "VEHICLE", "TYPE"]):
+                model_name = str(row[col]).strip().upper()
+                if model_name:
+                    result[model_name] = qty_veh
+                    if len(result) >= max_models:
+                        break
+
     return result
 
 def generate_qr_code(data_string):
@@ -310,7 +289,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     full_store_location = " ".join([str(v) for v in store_loc_values if v])  # join non-empty values
     # Use enhanced bus model detection
     mtm_quantities = detect_bus_model_and_qty(row, qty_veh_col, bus_model_col)
-    
+
     # ✅ Generate QR code only once, with full store location
     qr_data = (
         f"Part No: {part_no}\n"
