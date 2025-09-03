@@ -393,8 +393,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     # Bottom section - MTM boxes and QR code (UPDATED FOR 4 BOXES)
     models = list(mtm_quantities.keys())
 
-    # Always reserve 5 boxes
-    max_models = 5
+    max_models = 5  # fixed number of boxes
     mtm_box_width = 1.6 * cm
     mtm_row_height = 1.8 * cm
 
@@ -405,13 +404,18 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         if i < len(models):
             model_name = models[i]
             qty_val = mtm_quantities.get(model_name, "")
-            headers.append(model_name)
+            headers.append(model_name)  # actual model name from file
             values.append(Paragraph(
                 f"<b>{qty_val}</b>" if qty_val else "",
-                ParagraphStyle(name=f"Qty_{model_name}", fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER)
+                ParagraphStyle(
+                    name=f"Qty_{model_name}",
+                    fontName='Helvetica-Bold',
+                    fontSize=16,
+                    alignment=TA_CENTER
+                )
             ))
         else:
-            # Empty box
+            # Leave completely blank (no "MODEL 4/5")
             headers.append("")
             values.append("")
 
