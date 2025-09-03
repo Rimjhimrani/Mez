@@ -548,6 +548,10 @@ def generate_sticker_labels(excel_file_path, output_pdf_path, status_callback=No
 
     bus_model_col = find_bus_model_column(original_columns)
 
+    
+    if bus_model_col:
+        bus_model_col = bus_model_col.upper()
+
     if bus_model_col and bus_model_col in df.columns:
         all_models = df[bus_model_col].dropna().unique().tolist()
         all_models = [str(m).strip().upper() for m in all_models if str(m).strip() != ""]
