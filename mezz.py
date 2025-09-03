@@ -392,18 +392,23 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
 
     # Bottom section - MTM boxes and QR code (UPDATED FOR 4 BOXES)
     models = list(mtm_quantities.keys())
-    num_models = min(len(models), 5) if models else 1
+    if not models:
+        models = ["MODEL 1"]  # fallback if no model detected
+    
+    num_models = min(len(models), 5)  # max 5 models
 
     mtm_box_width = 1.6 * cm
     mtm_row_height = 1.8 * cm
 
-    # Build header row and value row dynamically
+    # Always show all detected models, fill qty if available otherwise blank
     headers = models[:num_models]
-    values = [
-        Paragraph(f"<b>{mtm_quantities[m]}</b>", ParagraphStyle(
-            name=f"Bold_{m}", fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-        )) if mtm_quantities.get(m) else "" for m in headers
-    ]
+    values = []
+    for m in headers:
+        qty_val = mtm_quantities.get(m, "")  # blank if missing
+        values.append(Paragraph(
+            f"<b>{qty_val}</b>" if qty_val else "",
+            ParagraphStyle(name=f"Qty_{m}", fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER)
+        ))
 
     position_matrix_data = [headers, values]
 
@@ -420,6 +425,10 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         ('FONTSIZE', (0, 0), (-1, -1), 18),
     ]))
 
+    # Adjust total width dynamically (instead of hardcoding 4)
+    total_mtm_width = num_models * mtm_box_width
+    remaining_width = CONTENT_BOX_WIDTH - total_mtm_width - qr_width
+    
     # QR code table (IMPROVED CENTERING)
     qr_width = 2.5*cm
     qr_height = 2.5*cm
