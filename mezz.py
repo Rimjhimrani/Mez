@@ -392,29 +392,34 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
 
     # Bottom section - MTM boxes and QR code (UPDATED FOR 4 BOXES)
     models = list(mtm_quantities.keys())
-    if not models:
-        models = ["MODEL 1"]  # fallback if no model detected
-    
-    num_models = min(len(models), 5)  # max 5 models
 
+    # Always reserve 5 boxes
+    max_models = 5
     mtm_box_width = 1.6 * cm
     mtm_row_height = 1.8 * cm
 
-    # Always show all detected models, fill qty if available otherwise blank
-    headers = models[:num_models]
+    headers = []
     values = []
-    for m in headers:
-        qty_val = mtm_quantities.get(m, "")  # blank if missing
-        values.append(Paragraph(
-            f"<b>{qty_val}</b>" if qty_val else "",
-            ParagraphStyle(name=f"Qty_{m}", fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER)
-        ))
+
+    for i in range(max_models):
+        if i < len(models):
+            model_name = models[i]
+            qty_val = mtm_quantities.get(model_name, "")
+            headers.append(model_name)
+            values.append(Paragraph(
+                f"<b>{qty_val}</b>" if qty_val else "",
+                ParagraphStyle(name=f"Qty_{model_name}", fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER)
+            ))
+        else:
+            # Empty box
+            headers.append("")
+            values.append("")
 
     position_matrix_data = [headers, values]
 
     mtm_table = Table(
         position_matrix_data,
-        colWidths=[mtm_box_width] * num_models,
+        colWidths=[mtm_box_width] * max_models,
         rowHeights=[mtm_row_height/2, mtm_row_height/2]
     )
     mtm_table.setStyle(TableStyle([
@@ -452,7 +457,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     ]))
 
     # Calculate spacing for better QR code centering (UPDATED FOR 4 BOXES)
-    total_mtm_width = num_models * mtm_box_width
+    total_mtm_width = max_models * mtm_box_width
     remaining_width = CONTENT_BOX_WIDTH - total_mtm_width - qr_width
     
     # Split the remaining space more evenly for better centering
