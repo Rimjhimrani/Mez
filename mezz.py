@@ -185,40 +185,65 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
     """
     Detect bus models dynamically (min 1, max 5 boxes).
     Returns dict {model_name: quantity}.
+    Only assigns quantity to the specific model mentioned in QTY/VEH column.
     """
     result = {}
 
-    # Quantity per vehicle (base value)
+    # Get quantity per vehicle value
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
 
-    # If QTY/VEH contains explicit "MODEL:QTY"
-    if qty_veh:
-        qty_pattern = r'([A-Za-z0-9]+)[:\-\s]*(\d+)'
-        matches = re.findall(qty_pattern, str(qty_veh).upper())
-        if matches:
-            for model, quantity in matches[:max_models]:
-                result[model] = quantity
-            return result
-
-    # Otherwise, scan dedicated model columns
+    # First, collect all available models from bus model columns
+    available_models = []
     if bus_model_cols:
         for col in bus_model_cols[:max_models]:
             if col in row and pd.notna(row[col]):
                 model_name = str(row[col]).strip().upper()
-                if model_name:   # only if not empty
-                    result[model_name] = qty_veh
-
-    # Fallback: scan whole row for model-like values
-    if not result and qty_veh:
-        for col in row.index:
-            if pd.notna(row[col]) and any(k in str(col).upper() for k in ["MODEL", "BUS", "VEHICLE", "TYPE"]):
-                model_name = str(row[col]).strip().upper()
                 if model_name:
-                    result[model_name] = qty_veh
-                    if len(result) >= max_models:
+                    available_models.append(model_name)
+
+    # If we have models, initialize them all with empty quantities
+    for model in available_models:
+        result[model] = ""
+
+    # Now check if QTY/VEH contains specific "MODEL:QTY" or "QTY MODEL" format
+    if qty_veh and available_models:
+        # Pattern to match formats like "12M:5", "12M 5", "5 12M", etc.
+        qty_pattern = r'(\d+)\s*([A-Za-z]+)|([A-Za-z]+)\s*[:\-\s]*(\d+)'
+        matches = re.findall(qty_pattern, str(qty_veh).upper())
+        
+        if matches:
+            for match in matches:
+                if match[0] and match[1]:  # Format: "5 12M" or "5M"
+                    quantity = match[0]
+                    model = match[1]
+                elif match[2] and match[3]:  # Format: "12M:5" or "12M 5"
+                    model = match[2]
+                    quantity = match[3]
+                else:
+                    continue
+                
+                # Check if this model exists in our available models
+                for available_model in available_models:
+                    if model in available_model or available_model in model:
+                        result[available_model] = quantity
                         break
+        else:
+            # If no specific model-quantity pattern found, check if qty_veh contains just a number
+            # and any of the model names
+            qty_number = re.search(r'\d+', str(qty_veh))
+            if qty_number:
+                quantity = qty_number.group()
+                # Check if any model name appears in the qty_veh string
+                for model in available_models:
+                    if model in str(qty_veh).upper():
+                        result[model] = quantity
+                        break
+
+    # If no models were found in bus model columns, return empty dict
+    if not result:
+        return {}
 
     return result
 
