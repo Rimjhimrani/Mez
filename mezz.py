@@ -181,84 +181,45 @@ def find_bus_model_column(df_columns):
     
     return None
 
-def detect_bus_model_and_qty(row, qty_veh_col, bus_model_col=None):
-    """Modified bus model detection for D6, M, P, 55T"""
-    result = {'D6': '', 'M': '', 'P': '', '55T': ''}
-    
+def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
+    """
+    Detect bus models dynamically (min 1, max 5 boxes).
+    Returns dict {model_name: quantity}.
+    """
+    result = {}
+
+    # Quantity per vehicle (base value)
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
-        qty_veh_raw = row[qty_veh_col]
-        if pd.notna(qty_veh_raw):
-            qty_veh = clean_number_format(qty_veh_raw)
+        qty_veh = clean_number_format(row[qty_veh_col])
 
-    if not qty_veh:
-        return result
-    
-    # Check if quantity already contains model info
-    qty_pattern = r'(D6|M|P|55T)[:\-\s]*(\d+)'
-    matches = re.findall(qty_pattern, qty_veh.upper())
-    
-    if matches:
-        for model, quantity in matches:
-            if model in result:
+    # If QTY/VEH contains explicit "MODEL:QTY"
+    if qty_veh:
+        qty_pattern = r'([A-Za-z0-9]+)[:\-\s]*(\d+)'
+        matches = re.findall(qty_pattern, str(qty_veh).upper())
+        if matches:
+            for model, quantity in matches[:max_models]:
                 result[model] = quantity
-        return result
-    
-    # Look for bus model in dedicated bus model column
-    detected_model = None
-    if bus_model_col and bus_model_col in row and pd.notna(row[bus_model_col]):
-        bus_model_value = str(row[bus_model_col]).strip().upper()
-        
-        if bus_model_value in ['D6']:
-            detected_model = 'D6'
-        elif bus_model_value in ['M']:
-            detected_model = 'M'
-        elif bus_model_value in ['P']:
-            detected_model = 'P'
-        elif bus_model_value in ['55T']:
-            detected_model = '55T'
-        elif re.search(r'\bD6\b', bus_model_value):
-            detected_model = 'D6'
-        elif re.search(r'\bM\b', bus_model_value):
-            detected_model = 'M'
-        elif re.search(r'\bP\b', bus_model_value):
-            detected_model = 'P'
-        elif re.search(r'\b55T\b', bus_model_value):
-            detected_model = '55T'
-    
-    if detected_model:
-        result[detected_model] = qty_veh
-        return result
-    
-    # Search through other columns
-    priority_columns = []
-    other_columns = []
-    
-    for col in row.index:
-        if pd.notna(row[col]):
-            col_upper = str(col).upper()
-            if any(keyword in col_upper for keyword in ['MODEL', 'BUS', 'VEHICLE', 'TYPE']):
-                priority_columns.append(col)
-            else:
-                other_columns.append(col)
-    
-    for col in priority_columns:
-        if pd.notna(row[col]):
-            value_str = str(row[col]).upper()
-            
-            if re.search(r'\bD6\b', value_str):
-                result['D6'] = qty_veh
-                return result
-            elif re.search(r'\bM\b', value_str):
-                result['M'] = qty_veh
-                return result
-            elif re.search(r'\bP\b', value_str):
-                result['P'] = qty_veh
-                return result
-            elif re.search(r'\b55T\b', value_str):
-                result['55T'] = qty_veh
-                return result
-    
+            return result
+
+    # Otherwise, scan dedicated model columns
+    if bus_model_cols:
+        for col in bus_model_cols[:max_models]:
+            if col in row and pd.notna(row[col]):
+                model_name = str(row[col]).strip().upper()
+                if model_name:   # only if not empty
+                    result[model_name] = qty_veh
+
+    # Fallback: scan whole row for model-like values
+    if not result and qty_veh:
+        for col in row.index:
+            if pd.notna(row[col]) and any(k in str(col).upper() for k in ["MODEL", "BUS", "VEHICLE", "TYPE"]):
+                model_name = str(row[col]).strip().upper()
+                if model_name:
+                    result[model_name] = qty_veh
+                    if len(result) >= max_models:
+                        break
+
     return result
 
 def generate_qr_code(data_string):
@@ -430,33 +391,27 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     sticker_content.append(Spacer(1, 0.1*cm))
 
     # Bottom section - MTM boxes and QR code (UPDATED FOR 4 BOXES)
-    mtm_box_width = 1.6*cm  # Adjusted width to fit 4 boxes
-    mtm_row_height = 1.8*cm
+    models = list(mtm_quantities.keys())
+    num_models = min(len(models), 5) if models else 1
 
-    position_matrix_data = [
-        ["D6", "M", "P", "55T"],  # Updated headers
-        [
-            Paragraph(f"<b>{mtm_quantities['D6']}</b>", ParagraphStyle(
-                name='BoldS', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['D6'] else "",
-            Paragraph(f"<b>{mtm_quantities['M']}</b>", ParagraphStyle(
-                name='BoldM', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['M'] else "",
-            Paragraph(f"<b>{mtm_quantities['P']}</b>", ParagraphStyle(
-                name='BoldD6', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['P'] else "",
-            Paragraph(f"<b>{mtm_quantities['55T']}</b>", ParagraphStyle(
-                name='BoldP', fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
-            )) if mtm_quantities['55T'] else ""
-        ]
+    mtm_box_width = 1.6 * cm
+    mtm_row_height = 1.8 * cm
+
+    # Build header row and value row dynamically
+    headers = models[:num_models]
+    values = [
+        Paragraph(f"<b>{mtm_quantities[m]}</b>", ParagraphStyle(
+            name=f"Bold_{m}", fontName='Helvetica-Bold', fontSize=16, alignment=TA_CENTER
+        )) if mtm_quantities.get(m) else "" for m in headers
     ]
+
+    position_matrix_data = [headers, values]
 
     mtm_table = Table(
         position_matrix_data,
-        colWidths=[mtm_box_width, mtm_box_width, mtm_box_width, mtm_box_width],  # 4 columns
+        colWidths=[mtm_box_width] * num_models,
         rowHeights=[mtm_row_height/2, mtm_row_height/2]
     )
-
     mtm_table.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
