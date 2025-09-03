@@ -271,7 +271,7 @@ def extract_store_location_data_from_excel(row_data, max_cells=12):
 
     return values
 
-def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col):
+def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col, all_models):
     """Create a single sticker layout with border around the entire sticker"""
     # Extract data with proper number formatting
     part_no = clean_number_format(row[part_no_col]) if pd.notna(row[part_no_col]) else ""
