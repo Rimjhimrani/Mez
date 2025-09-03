@@ -183,25 +183,26 @@ def find_bus_model_column(df_columns):
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
     """
-    Always return exactly 5 model boxes.
-    Fill QTY/VEH where available, leave others empty.
+    Always create exactly 5 model boxes.
+    Model names come from data, extra boxes stay blank.
+    Each model shows its own QTY/VEH if available.
     """
     result = {}
 
-    # Quantity per vehicle value
+    # Quantity per vehicle (single value if provided)
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
 
     models = []
 
-    # Collect dynamic models from given bus_model_cols
+    # Collect dynamic models from the given bus_model_cols
     if bus_model_cols:
         for col in bus_model_cols[:max_models]:
             if col in row and pd.notna(row[col]):
                 models.append(str(row[col]).strip().upper())
 
-    # Fallback: try scanning whole row for MODEL/BUS/VEHICLE
+    # Fallback: scan row for model-like columns
     if not models:
         for col in row.index:
             if pd.notna(row[col]) and any(k in str(col).upper() for k in ["MODEL", "BUS", "VEHICLE", "TYPE"]):
@@ -212,16 +213,16 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
     # Deduplicate and cap at 5
     models = list(dict.fromkeys(models))[:max_models]
 
-    # Create exactly 5 slots
-    for i in range(max_models):
-        if i < len(models):
-            model_name = models[i]
-            result[model_name] = qty_veh if qty_veh else ""
-        else:
-            result[f"MODEL{i+1}"] = ""   # Placeholder column
+    # Fill result with models (and qty if exists)
+    for m in models:
+        result[m] = qty_veh if qty_veh else ""
+
+    # Add blank slots until we have 5
+    while len(result) < max_models:
+        result[""] = ""
 
     return result
-
+    
 def generate_qr_code(data_string):
     """Generate a QR code from the given data string"""
     try:
