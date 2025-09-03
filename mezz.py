@@ -222,6 +222,55 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
 
     return result
 
+def generate_qr_code(data_string):
+    """Generate a QR code from the given data string"""
+    try:
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=10,
+            border=4,
+        )
+        
+        qr.add_data(data_string)
+        qr.make(fit=True)
+        
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+        
+        img_buffer = BytesIO()
+        qr_img.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        
+        return Image(img_buffer, width=2.2*cm, height=2.2*cm)
+    except Exception as e:
+        st.error(f"Error generating QR code: {e}")
+        return None
+
+def extract_store_location_data_from_excel(row_data, max_cells=12):
+    """Extract up to 12 store location values dynamically"""
+    values = []
+    
+    def get_clean_value(possible_names):
+        for name in possible_names:
+            if name in row_data:
+                val = row_data[name]
+                if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
+                    return clean_number_format(val)
+            for col in row_data.index:
+                if isinstance(col, str) and col.upper() == name.upper():
+                    val = row_data[col]
+                    if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
+                        return clean_number_format(val)
+        return None
+
+    # Loop through possible Store Loc 1 → Store Loc 12
+    for i in range(1, max_cells + 1):
+        val = get_clean_value([f'Store Loc {i}', f'STORE_LOC_{i}'])
+        if val:
+            values.append(val)
+
+    return values
+
 def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col):
     """Create a single sticker layout with border around the entire sticker"""
     # Extract data with proper number formatting
@@ -240,7 +289,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     full_store_location = " ".join([str(v) for v in store_loc_values if v])  # join non-empty values
     # Use enhanced bus model detection
     mtm_quantities = detect_bus_model_and_qty(row, qty_veh_col, bus_model_col)
-
+    
     # ✅ Generate QR code only once, with full store location
     qr_data = (
         f"Part No: {part_no}\n"
