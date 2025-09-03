@@ -183,25 +183,25 @@ def find_bus_model_column(df_columns):
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
     """
-    Detect bus models dynamically (min 1, max 5 boxes).
-    Only one model will carry the QTY/VEH value, others remain empty.
+    Always return exactly 5 model boxes.
+    Fill QTY/VEH where available, leave others empty.
     """
     result = {}
 
-    # Quantity per vehicle
+    # Quantity per vehicle value
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
 
     models = []
 
-    # Collect dynamic model names from the row/columns
+    # Collect dynamic models from given bus_model_cols
     if bus_model_cols:
         for col in bus_model_cols[:max_models]:
             if col in row and pd.notna(row[col]):
                 models.append(str(row[col]).strip().upper())
 
-    # If nothing found, fallback: scan row for possible model values
+    # Fallback: try scanning whole row for MODEL/BUS/VEHICLE
     if not models:
         for col in row.index:
             if pd.notna(row[col]) and any(k in str(col).upper() for k in ["MODEL", "BUS", "VEHICLE", "TYPE"]):
@@ -209,69 +209,18 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
                 if len(models) >= max_models:
                     break
 
-    # Ensure at least one model box is created
-    if not models:
-        models = ["MODEL"]
+    # Deduplicate and cap at 5
+    models = list(dict.fromkeys(models))[:max_models]
 
-    # Initialize all empty
-    for m in models:
-        result[m] = ""
-
-    # Fill QTY only for the *first* detected model
-    if qty_veh and models:
-        active_model = models[0]  # <-- only first one gets the QTY
-        result[active_model] = qty_veh
+    # Create exactly 5 slots
+    for i in range(max_models):
+        if i < len(models):
+            model_name = models[i]
+            result[model_name] = qty_veh if qty_veh else ""
+        else:
+            result[f"MODEL{i+1}"] = ""   # Placeholder column
 
     return result
-
-def generate_qr_code(data_string):
-    """Generate a QR code from the given data string"""
-    try:
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_M,
-            box_size=10,
-            border=4,
-        )
-        
-        qr.add_data(data_string)
-        qr.make(fit=True)
-        
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-        
-        img_buffer = BytesIO()
-        qr_img.save(img_buffer, format='PNG')
-        img_buffer.seek(0)
-        
-        return Image(img_buffer, width=2.2*cm, height=2.2*cm)
-    except Exception as e:
-        st.error(f"Error generating QR code: {e}")
-        return None
-
-def extract_store_location_data_from_excel(row_data, max_cells=12):
-    """Extract up to 12 store location values dynamically"""
-    values = []
-    
-    def get_clean_value(possible_names):
-        for name in possible_names:
-            if name in row_data:
-                val = row_data[name]
-                if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
-                    return clean_number_format(val)
-            for col in row_data.index:
-                if isinstance(col, str) and col.upper() == name.upper():
-                    val = row_data[col]
-                    if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
-                        return clean_number_format(val)
-        return None
-
-    # Loop through possible Store Loc 1 → Store Loc 12
-    for i in range(1, max_cells + 1):
-        val = get_clean_value([f'Store Loc {i}', f'STORE_LOC_{i}'])
-        if val:
-            values.append(val)
-
-    return values
 
 def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col):
     """Create a single sticker layout with border around the entire sticker"""
@@ -291,7 +240,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     full_store_location = " ".join([str(v) for v in store_loc_values if v])  # join non-empty values
     # Use enhanced bus model detection
     mtm_quantities = detect_bus_model_and_qty(row, qty_veh_col, bus_model_col)
-    
+
     # ✅ Generate QR code only once, with full store location
     qr_data = (
         f"Part No: {part_no}\n"
