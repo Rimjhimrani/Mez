@@ -389,7 +389,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
 
     # Add small spacer
     sticker_content.append(Spacer(1, 0.1*cm))
-  
+
     # Bottom section - MTM boxes and QR code (UPDATED FOR 4 BOXES)
     models = list(mtm_quantities.keys())
     num_models = min(len(models), 5) if models else 1
@@ -420,13 +420,6 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         ('FONTSIZE', (0, 0), (-1, -1), 18),
     ]))
 
-    # QR code section
-    qr_width = 2.5*cm
-    qr_height = 2.5*cm
-    ...
-    # Instead of hardcoding "4 boxes", calculate dynamically:
-    total_mtm_width = num_models * mtm_box_width
-    remaining_width = CONTENT_BOX_WIDTH - total_mtm_width - qr_width
     # QR code table (IMPROVED CENTERING)
     qr_width = 2.5*cm
     qr_height = 2.5*cm
