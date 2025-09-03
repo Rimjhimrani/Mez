@@ -183,54 +183,42 @@ def find_bus_model_column(df_columns):
 
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
     """
-    Detect bus models from dedicated Bus Model column(s) only.
-    - If only 1 model is detected → one box with qty.
-    - If multiple models → show all, only fill the matching one.
-    - Ignores store location and other unrelated columns.
+    Detect bus models dynamically (min 1, max 5 boxes).
+    Returns dict {model_name: quantity}.
     """
     result = {}
 
-    # Get QTY/VEH value
+    # Quantity per vehicle (base value)
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
 
-    # Explicit mapping in QTY/VEH (e.g., "12M:4, 9M:2")
-    qty_pattern = r'([A-Z0-9]+)[:\-\s]*(\d+)'
-    matches = re.findall(qty_pattern, str(qty_veh).upper()) if qty_veh else []
-    if matches:
-        for model, quantity in matches[:max_models]:
-            result[model] = quantity
-        return result
+    # If QTY/VEH contains explicit "MODEL:QTY"
+    if qty_veh:
+        qty_pattern = r'([A-Za-z0-9]+)[:\-\s]*(\d+)'
+        matches = re.findall(qty_pattern, str(qty_veh).upper())
+        if matches:
+            for model, quantity in matches[:max_models]:
+                result[model] = quantity
+            return result
 
-    # ✅ Step 1: Collect models only from bus_model_cols
-    detected_models = []
+    # Otherwise, scan dedicated model columns
     if bus_model_cols:
         for col in bus_model_cols[:max_models]:
             if col in row and pd.notna(row[col]):
                 model_name = str(row[col]).strip().upper()
-                # Only keep short names like 12M, 55T, D6 (ignore long part numbers)
-                if model_name and len(model_name) <= 4:
-                    detected_models.append(model_name)
+                if model_name:   # only if not empty
+                    result[model_name] = qty_veh
 
-    # Step 2: Assign values
-    if detected_models:
-        if len(detected_models) == 1:
-            # Single model → one box with qty
-            result[detected_models[0]] = qty_veh if qty_veh else ""
-        else:
-            # Multiple models → show all, only fill matching one
-            for m in detected_models[:max_models]:
-                result[m] = ""
-            if qty_veh:
-                if qty_veh.upper() in result:
-                    result[qty_veh.upper()] = qty_veh
-                else:
-                    result[detected_models[0]] = qty_veh
-    else:
-        # No models detected → fallback
-        if qty_veh:
-            result["MODEL"] = qty_veh
+    # Fallback: scan whole row for model-like values
+    if not result and qty_veh:
+        for col in row.index:
+            if pd.notna(row[col]) and any(k in str(col).upper() for k in ["MODEL", "BUS", "VEHICLE", "TYPE"]):
+                model_name = str(row[col]).strip().upper()
+                if model_name:
+                    result[model_name] = qty_veh
+                    if len(result) >= max_models:
+                        break
 
     return result
 
