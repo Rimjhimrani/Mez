@@ -217,12 +217,12 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
     for m in models:
         result[m] = qty_veh if qty_veh else ""
 
-    # Add blank slots until we have 5
+    # Add blank slots until we have exactly 5
     while len(result) < max_models:
-        result[""] = ""
+        result[f"BLANK{len(result)+1}"] = ""
 
     return result
-    
+
 def generate_qr_code(data_string):
     """Generate a QR code from the given data string"""
     try:
