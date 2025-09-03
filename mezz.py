@@ -103,6 +103,7 @@ def get_dynamic_desc_style(text):
         allowWidows=1,    # Allow single lines at end of paragraph
         allowOrphans=1,   # Allow single lines at start of paragraph
     )
+
 qty_style = ParagraphStyle(
     name='Quantity', 
     fontName='Helvetica', 
@@ -272,7 +273,7 @@ def generate_qr_code(data_string):
         return None
 
 def extract_store_location_data_from_excel(row_data, max_cells=12):
-    """Extract up to 12 store location values dynamically"""
+    """Extract up to 12 store location values dynamically - FIXED VERSION"""
     values = []
     
     def get_clean_value(possible_names):
@@ -281,6 +282,7 @@ def extract_store_location_data_from_excel(row_data, max_cells=12):
                 val = row_data[name]
                 if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
                     return clean_number_format(val)
+            # Check for case-insensitive column names
             for col in row_data.index:
                 if isinstance(col, str) and col.upper() == name.upper():
                     val = row_data[col]
@@ -290,14 +292,35 @@ def extract_store_location_data_from_excel(row_data, max_cells=12):
 
     # Loop through possible Store Loc 1 → Store Loc 12
     for i in range(1, max_cells + 1):
-        val = get_clean_value([f'Store Loc {i}', f'STORE_LOC_{i}'])
+        val = get_clean_value([
+            f'Store Loc {i}', 
+            f'STORE_LOC_{i}',
+            f'STORE LOC {i}',
+            f'Store_Loc_{i}',
+            f'StoreLoc{i}',
+            f'Store Location {i}',
+            f'STORE LOCATION {i}'
+        ])
         if val:
             values.append(val)
-
+    
+    # If no Store Loc columns found, try to find any column with "STORE" or "LOC" in name
+    if not values:
+        for col in row_data.index:
+            if isinstance(col, str) and ('STORE' in col.upper() or 'LOC' in col.upper()):
+                val = row_data[col]
+                if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
+                    values.append(clean_number_format(val))
+                    break  # Just take the first one found
+    
+    # If still no values, return a default placeholder
+    if not values:
+        values = ["N/A"]
+    
     return values
 
 def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col):
-    """Create a single sticker layout with border around the entire sticker"""
+    """Create a single sticker layout with border around the entire sticker - FIXED VERSION"""
     # Extract data with proper number formatting
     part_no = clean_number_format(row[part_no_col]) if pd.notna(row[part_no_col]) else ""
     desc = str(row[desc_col]).strip() if pd.notna(row[desc_col]) else ""
@@ -309,13 +332,15 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
-    # Get all store location parts for table and QR code
+    
+    # Get all store location parts for table and QR code - FIXED
     store_loc_values = extract_store_location_data_from_excel(row)
     full_store_location = " ".join([str(v) for v in store_loc_values if v])  # join non-empty values
+    
     # Use enhanced bus model detection
     mtm_quantities = detect_bus_model_and_qty(row, qty_veh_col, bus_model_col)
 
-    # ✅ Generate QR code only once, with full store location
+    # Generate QR code only once, with full store location
     qr_data = (
         f"Part No: {part_no}\n"
         f"Description: {desc}\n"
@@ -364,15 +389,17 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
 
     sticker_content.append(main_table)
 
+    # Store Location Section - FIXED TO ALWAYS HAVE AT LEAST ONE COLUMN
     store_loc_label = Paragraph("Store Location", ParagraphStyle(
         name='StoreLoc', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER
     ))
+    
     store_loc_values = [v for v in extract_store_location_data_from_excel(row) if v]  # keep only non-empty
-    if not store_loc_values:
-        store_loc_values = [""]
+    if not store_loc_values:  # FIXED: Ensure we always have at least one value
+        store_loc_values = ["N/A"]
 
     inner_table_width = CONTENT_BOX_WIDTH * 2 / 3
-    num_cols = len(store_loc_values)
+    num_cols = max(len(store_loc_values), 1)  # FIXED: Ensure at least 1 column
     inner_col_widths = [inner_table_width / num_cols] * num_cols
 
     store_loc_inner_table = Table(
@@ -415,9 +442,15 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     # Add small spacer
     sticker_content.append(Spacer(1, 0.1*cm))
 
-    # Bottom section - MTM boxes and QR code (UPDATED FOR 4 BOXES)
+    # Bottom section - MTM boxes and QR code - FIXED TO HANDLE EMPTY MTM DATA
     models = list(mtm_quantities.keys())
     num_models = min(len(models), 5) if models else 1
+    
+    # If no models, create default model boxes
+    if not models:
+        models = ['N/A']
+        mtm_quantities = {'N/A': ''}
+        num_models = 1
 
     mtm_box_width = 1.6 * cm
     mtm_row_height = 1.8 * cm
@@ -471,8 +504,8 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
 
-    # Calculate spacing for better QR code centering (UPDATED FOR 4 BOXES)
-    total_mtm_width = 4 * mtm_box_width  # Now 4 boxes instead of 3
+    # Calculate spacing for better QR code centering
+    total_mtm_width = num_models * mtm_box_width
     remaining_width = CONTENT_BOX_WIDTH - total_mtm_width - qr_width
     
     # Split the remaining space more evenly for better centering
@@ -634,7 +667,6 @@ def main():
         type=['xlsx', 'xls', 'csv'],
         help="Upload your Excel or CSV file containing part information"
     )
-    
     if uploaded_file is not None:
         # Create temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
