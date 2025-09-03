@@ -184,8 +184,8 @@ def find_bus_model_column(df_columns):
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
     """
     Dynamically detect bus models (min 1, max 5).
-    If QTY/VEH only refers to one model, fill only that model's box.
-    Other detected models appear empty.
+    - If only one model is detected → show one box with qty.
+    - If multiple models are detected → show all, but only fill the matching one.
     """
     result = {}
 
@@ -194,16 +194,15 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
 
-    # Step 1: Try to parse QTY/VEH if it contains explicit model→qty mapping
+    # Step 1: Try parsing QTY/VEH if it already contains explicit model→qty mapping
     qty_pattern = r'([A-Za-z0-9]+)[:\-\s]*(\d+)'
     matches = re.findall(qty_pattern, str(qty_veh).upper()) if qty_veh else []
     if matches:
-        # Example: "9M:2, 12M:3"
         for model, quantity in matches[:max_models]:
             result[model] = quantity
         return result
 
-    # Step 2: Collect possible model names (from dedicated model columns or row scan)
+    # Step 2: Collect possible model names
     detected_models = []
     if bus_model_cols:
         for col in bus_model_cols[:max_models]:
@@ -213,35 +212,37 @@ def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5
                     detected_models.append(model_name)
 
     if not detected_models:
-        # Fallback → scan all row values for model-like tokens (e.g., "12M", "9M")
+        # Fallback → scan all row values for model-like tokens
         for col in row.index:
             if pd.notna(row[col]):
                 value = str(row[col]).strip().upper()
-                if re.match(r'^[0-9]*[A-Z]+[0-9]*$', value):  # crude model pattern
+                if re.match(r'^[0-9]*[A-Z]+[0-9]*$', value):
                     if value not in detected_models:
                         detected_models.append(value)
                         if len(detected_models) >= max_models:
                             break
 
-    # Step 3: Assign qty only if it matches one model, else leave others blank
+    # Step 3: Assign values
     if detected_models:
-        # Default: all empty
-        for m in detected_models[:max_models]:
-            result[m] = ""
+        if len(detected_models) == 1:
+            # Only one model → single box with qty
+            result[detected_models[0]] = qty_veh if qty_veh else ""
+        else:
+            # Multiple models → show all, but only fill the matching one
+            for m in detected_models[:max_models]:
+                result[m] = ""
 
-        if qty_veh:
-            # If qty_veh itself looks like a model+number (e.g., "12M")
-            if re.match(r'^[0-9]*[A-Z]+[0-9]*$', qty_veh.upper()):
-                if qty_veh.upper() in result:
-                    result[qty_veh.upper()] = qty_veh
+            if qty_veh:
+                qty_veh_upper = qty_veh.upper()
+                if qty_veh_upper in result:
+                    # If qty_veh looks like one of the models (e.g., "12M")
+                    result[qty_veh_upper] = qty_veh
                 else:
-                    result[qty_veh.upper()] = qty_veh
-            else:
-                # Otherwise, put the raw qty_veh into the first model only
-                first_model = detected_models[0]
-                result[first_model] = qty_veh
+                    # Else assign qty to the first model only
+                    first_model = detected_models[0]
+                    result[first_model] = qty_veh
     else:
-        # No models detected → single generic
+        # No models detected → generic fallback
         if qty_veh:
             result["MODEL"] = qty_veh
 
