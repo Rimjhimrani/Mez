@@ -425,10 +425,6 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         ('FONTSIZE', (0, 0), (-1, -1), 18),
     ]))
 
-    # Adjust total width dynamically (instead of hardcoding 4)
-    total_mtm_width = num_models * mtm_box_width
-    remaining_width = CONTENT_BOX_WIDTH - total_mtm_width - qr_width
-    
     # QR code table (IMPROVED CENTERING)
     qr_width = 2.5*cm
     qr_height = 2.5*cm
@@ -456,7 +452,7 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     ]))
 
     # Calculate spacing for better QR code centering (UPDATED FOR 4 BOXES)
-    total_mtm_width = 4 * mtm_box_width  # Now 4 boxes instead of 3
+    total_mtm_width = num_models * mtm_box_width
     remaining_width = CONTENT_BOX_WIDTH - total_mtm_width - qr_width
     
     # Split the remaining space more evenly for better centering
