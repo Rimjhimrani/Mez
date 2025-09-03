@@ -103,7 +103,6 @@ def get_dynamic_desc_style(text):
         allowWidows=1,    # Allow single lines at end of paragraph
         allowOrphans=1,   # Allow single lines at start of paragraph
     )
-
 qty_style = ParagraphStyle(
     name='Quantity', 
     fontName='Helvetica', 
@@ -185,66 +184,43 @@ def find_bus_model_column(df_columns):
 def detect_bus_model_and_qty(row, qty_veh_col, bus_model_cols=None, max_models=5):
     """
     Detect bus models dynamically (min 1, max 5 boxes).
-    Returns dict {model_name: quantity}.
-    Only assigns quantity to the specific model mentioned in QTY/VEH column.
+    Only one model will carry the QTY/VEH value, others remain empty.
     """
     result = {}
 
-    # Get quantity per vehicle value
+    # Quantity per vehicle
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
 
-    # First, collect all available models from bus model columns
-    available_models = []
+    models = []
+
+    # Collect dynamic model names from the row/columns
     if bus_model_cols:
         for col in bus_model_cols[:max_models]:
             if col in row and pd.notna(row[col]):
-                model_name = str(row[col]).strip().upper()
-                if model_name:
-                    available_models.append(model_name)
+                models.append(str(row[col]).strip().upper())
 
-    # If we have models, initialize them all with empty quantities
-    for model in available_models:
-        result[model] = ""
+    # If nothing found, fallback: scan row for possible model values
+    if not models:
+        for col in row.index:
+            if pd.notna(row[col]) and any(k in str(col).upper() for k in ["MODEL", "BUS", "VEHICLE", "TYPE"]):
+                models.append(str(row[col]).strip().upper())
+                if len(models) >= max_models:
+                    break
 
-    # Now check if QTY/VEH contains specific "MODEL:QTY" or "QTY MODEL" format
-    if qty_veh and available_models:
-        # Pattern to match formats like "12M:5", "12M 5", "5 12M", etc.
-        qty_pattern = r'(\d+)\s*([A-Za-z]+)|([A-Za-z]+)\s*[:\-\s]*(\d+)'
-        matches = re.findall(qty_pattern, str(qty_veh).upper())
-        
-        if matches:
-            for match in matches:
-                if match[0] and match[1]:  # Format: "5 12M" or "5M"
-                    quantity = match[0]
-                    model = match[1]
-                elif match[2] and match[3]:  # Format: "12M:5" or "12M 5"
-                    model = match[2]
-                    quantity = match[3]
-                else:
-                    continue
-                
-                # Check if this model exists in our available models
-                for available_model in available_models:
-                    if model in available_model or available_model in model:
-                        result[available_model] = quantity
-                        break
-        else:
-            # If no specific model-quantity pattern found, check if qty_veh contains just a number
-            # and any of the model names
-            qty_number = re.search(r'\d+', str(qty_veh))
-            if qty_number:
-                quantity = qty_number.group()
-                # Check if any model name appears in the qty_veh string
-                for model in available_models:
-                    if model in str(qty_veh).upper():
-                        result[model] = quantity
-                        break
+    # Ensure at least one model box is created
+    if not models:
+        models = ["MODEL"]
 
-    # If no models were found in bus model columns, return empty dict
-    if not result:
-        return {}
+    # Initialize all empty
+    for m in models:
+        result[m] = ""
+
+    # Fill QTY only for the *first* detected model
+    if qty_veh and models:
+        active_model = models[0]  # <-- only first one gets the QTY
+        result[active_model] = qty_veh
 
     return result
 
@@ -273,7 +249,7 @@ def generate_qr_code(data_string):
         return None
 
 def extract_store_location_data_from_excel(row_data, max_cells=12):
-    """Extract up to 12 store location values dynamically - FIXED VERSION"""
+    """Extract up to 12 store location values dynamically"""
     values = []
     
     def get_clean_value(possible_names):
@@ -282,7 +258,6 @@ def extract_store_location_data_from_excel(row_data, max_cells=12):
                 val = row_data[name]
                 if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
                     return clean_number_format(val)
-            # Check for case-insensitive column names
             for col in row_data.index:
                 if isinstance(col, str) and col.upper() == name.upper():
                     val = row_data[col]
@@ -292,35 +267,14 @@ def extract_store_location_data_from_excel(row_data, max_cells=12):
 
     # Loop through possible Store Loc 1 → Store Loc 12
     for i in range(1, max_cells + 1):
-        val = get_clean_value([
-            f'Store Loc {i}', 
-            f'STORE_LOC_{i}',
-            f'STORE LOC {i}',
-            f'Store_Loc_{i}',
-            f'StoreLoc{i}',
-            f'Store Location {i}',
-            f'STORE LOCATION {i}'
-        ])
+        val = get_clean_value([f'Store Loc {i}', f'STORE_LOC_{i}'])
         if val:
             values.append(val)
-    
-    # If no Store Loc columns found, try to find any column with "STORE" or "LOC" in name
-    if not values:
-        for col in row_data.index:
-            if isinstance(col, str) and ('STORE' in col.upper() or 'LOC' in col.upper()):
-                val = row_data[col]
-                if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', 'null', '']:
-                    values.append(clean_number_format(val))
-                    break  # Just take the first one found
-    
-    # If still no values, return a default placeholder
-    if not values:
-        values = ["N/A"]
-    
+
     return values
 
 def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_col, store_loc_col, bus_model_col):
-    """Create a single sticker layout with border around the entire sticker - FIXED VERSION"""
+    """Create a single sticker layout with border around the entire sticker"""
     # Extract data with proper number formatting
     part_no = clean_number_format(row[part_no_col]) if pd.notna(row[part_no_col]) else ""
     desc = str(row[desc_col]).strip() if pd.notna(row[desc_col]) else ""
@@ -332,15 +286,13 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     qty_veh = ""
     if qty_veh_col and qty_veh_col in row and pd.notna(row[qty_veh_col]):
         qty_veh = clean_number_format(row[qty_veh_col])
-    
-    # Get all store location parts for table and QR code - FIXED
+    # Get all store location parts for table and QR code
     store_loc_values = extract_store_location_data_from_excel(row)
     full_store_location = " ".join([str(v) for v in store_loc_values if v])  # join non-empty values
-    
     # Use enhanced bus model detection
     mtm_quantities = detect_bus_model_and_qty(row, qty_veh_col, bus_model_col)
-
-    # Generate QR code only once, with full store location
+    
+    # ✅ Generate QR code only once, with full store location
     qr_data = (
         f"Part No: {part_no}\n"
         f"Description: {desc}\n"
@@ -389,17 +341,15 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
 
     sticker_content.append(main_table)
 
-    # Store Location Section - FIXED TO ALWAYS HAVE AT LEAST ONE COLUMN
     store_loc_label = Paragraph("Store Location", ParagraphStyle(
         name='StoreLoc', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER
     ))
-    
     store_loc_values = [v for v in extract_store_location_data_from_excel(row) if v]  # keep only non-empty
-    if not store_loc_values:  # FIXED: Ensure we always have at least one value
-        store_loc_values = ["N/A"]
+    if not store_loc_values:
+        store_loc_values = [""]
 
     inner_table_width = CONTENT_BOX_WIDTH * 2 / 3
-    num_cols = max(len(store_loc_values), 1)  # FIXED: Ensure at least 1 column
+    num_cols = len(store_loc_values)
     inner_col_widths = [inner_table_width / num_cols] * num_cols
 
     store_loc_inner_table = Table(
@@ -442,15 +392,9 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
     # Add small spacer
     sticker_content.append(Spacer(1, 0.1*cm))
 
-    # Bottom section - MTM boxes and QR code - FIXED TO HANDLE EMPTY MTM DATA
+    # Bottom section - MTM boxes and QR code (UPDATED FOR 4 BOXES)
     models = list(mtm_quantities.keys())
     num_models = min(len(models), 5) if models else 1
-    
-    # If no models, create default model boxes
-    if not models:
-        models = ['N/A']
-        mtm_quantities = {'N/A': ''}
-        num_models = 1
 
     mtm_box_width = 1.6 * cm
     mtm_row_height = 1.8 * cm
@@ -504,8 +448,8 @@ def create_single_sticker(row, part_no_col, desc_col, max_capacity_col, qty_veh_
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
 
-    # Calculate spacing for better QR code centering
-    total_mtm_width = num_models * mtm_box_width
+    # Calculate spacing for better QR code centering (UPDATED FOR 4 BOXES)
+    total_mtm_width = 4 * mtm_box_width  # Now 4 boxes instead of 3
     remaining_width = CONTENT_BOX_WIDTH - total_mtm_width - qr_width
     
     # Split the remaining space more evenly for better centering
@@ -667,6 +611,7 @@ def main():
         type=['xlsx', 'xls', 'csv'],
         help="Upload your Excel or CSV file containing part information"
     )
+    
     if uploaded_file is not None:
         # Create temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
